@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>社區抓牛大賽 - 物理動態版</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #4CAF50; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
+        canvas { display: block; background: linear-gradient(#87CEEB, #E0F7FA 70%, #4CAF50 70%); }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px #000; font-size: 24px; pointer-events: none; }
+        #msg { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); color: #FFD700; font-size: 40px; font-weight: bold; text-align: center; display: none; text-shadow: 3px 3px 0 #000; width: 80%; }
+        #hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: white; background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 20px; font-size: 18px; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    🏆 關卡: <span id="lv">1</span> / 6 <br>
+    💰 分數: <span id="score">0</span>
+</div>
+<div id="msg"></div>
+<div id="hint">點擊螢幕拋出繩索！套中後瘋狂連點！</div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const lvDisp = document.getElementById('lv');
+const scoreDisp = document.getElementById('score');
+const msgDisp = document.getElementById('msg');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// --- 遊戲狀態管理 ---
+let level = 1;
+let score = 0;
+let gameState = 'RUNNING'; // RUNNING, CATCHING, SUCCESS, ANIMATION
+let pullProgress = 0;
+let shakeAmount = 0;
+let frameCount = 0;
+
+// --- 繩索物件 ---
+let lasso = {
+    x: canvas.width / 2,
+    y: canvas.height - 100,
+    active: false,
+    speed: 20,
+    radius: 40
+};
+
+// --- 牛物件類別 ---
+class Cow {
+    constructor(isGold = false) {
+        this.isGold = isGold;
+        this.width = isGold ? 150 : 120;
+        this.height = isGold ? 120 : 100;
+        this.x = -200;
+        this.y = canvas.height * 0.75 - this.height; // 跑在草地上
+        this.speed = (4 + level * 1.5);
+        this.strugglePower = 0.2 + (level * 0.15); // 每幀流失的拉力
+    }
+    update() {
+        if (gameState === 'RUNNING') {
+            this.x += this.speed;
+        } else if (gameState === 'CATCHING') {
+            // 物理：牛的位置隨拉力進度前後移動
+            let targetX = (canvas.width / 2) + (100 - pullProgress) * 3;
+            this.x += (targetX - this.x) * 0.1; 
+        }
+    }
+    draw() {
+        ctx.save();
+        // 簡單繪製 placeholder，直到你換成 GitHub 上的 AI 素材
+        ctx.fillStyle = this.isGold ? '#FFD700' : '#FFF';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        // 身體
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.strokeRect(this.x, this.y, this.width, this.height);
+        // 頭部 (簡單示意)
+        ctx.fillStyle = '#FFC0CB';
+        ctx.fillRect(this.x + this.width - 20, this.y + 10, 30, 40);
+        ctx.restore();
+    }
+}
+
+let currentCow = new Cow();
+
+// --- 核心邏輯 ---
+function initLevel(nextLevel) {
+    level = nextLevel;
+    lvDisp.innerText = level;
+    currentCow = new Cow(level === 3);
+    gameState = 'RUNNING';
+    msgDisp.style.display = 'none';
+    resetLasso();
+}
+
+function resetLasso() {
+    lasso.active = false;
+    lasso.y = canvas.height - 100;
+}
+
+function gameLoop() {
+    frameCount++;
+    // 震動物理計算
+    let offsetX = (Math.random() - 0.5) * shakeAmount;
+    let offsetY = (Math.random() - 0.5) * shakeAmount;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+
+    // 1. 繪製環境（草地與路徑）
+    ctx.fillStyle = '#388E3C';
+    ctx.fillRect(0, canvas.height * 0.7, canvas.width, canvas.height * 0.3);
+
+    // 2. 更新與繪製牛
+    currentCow.update();
+    currentCow.draw();
+    if (currentCow.x > canvas.width) {
+        currentCow = new Cow(level === 3); // 跑掉就重新出一隻
+    }
+
+    // 3. 繪製繩索
+    if (lasso.active) {
+        if (gameState === 'RUNNING') {
+            lasso.y -= lasso.speed;
+            // 繪製飛行中的套索
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, lasso.y, lasso.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = '#6d4c41';
+            ctx.lineWidth = 5;
+            ctx.stroke();
+            
+            // 碰撞判定
+            if (Math.abs(lasso.y - (currentCow.y + 50)) < 40 && 
+                Math.abs(canvas.width / 2 - (currentCow.x + currentCow.width/2)) < 60) {
+                gameState = 'CATCHING';
+                pullProgress = 30;
+                shakeAmount = 15;
+            }
+            if (lasso.y < 50) resetLasso();
+        }
+    }
+
+    // 4. 抓捕模式 (拔河物理)
+    if (gameState === 'CATCHING') {
+        pullProgress -= currentCow.strugglePower;
+        
+        // 繪製連到的繩索（受張力影響的曲線）
+        ctx.beginPath();
+        ctx.moveTo(canvas.width / 2, canvas.height);
+        ctx.quadraticCurveTo(
+            canvas.width / 2 + Math.sin(frameCount * 0.2) * 20, 
+            canvas.height * 0.8, 
+            currentCow.x + 20, currentCow.y + 50
+        );
+        ctx.strokeStyle = '#4e342e';
+        ctx.lineWidth = 6;
+        ctx.stroke();
+
+        // 繪製拉力條
+        drawProgressBar();
+
+        if (pullProgress <= 0) {
+            failCatch();
+        } else if (pullProgress >= 100) {
+            successCatch();
+        }
+        shakeAmount *= 0.9;
+    }
+
+    ctx.restore();
+    requestAnimationFrame(gameLoop);
+}
+
+function drawProgressBar() {
+    const barW = 200;
+    const barH = 20;
+    const x = canvas.width / 2 - barW / 2;
+    const y = 150;
+    
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 2, y - 2, barW + 4, barH + 4);
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(x, y, barW, barH);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(x, y, pullProgress * 2, barH);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px Arial';
+    ctx.fillText('POWER!!', x + 60, y - 10);
+}
+
+function successCatch() {
+    gameState = 'SUCCESS';
+    score += level * 100;
+    scoreDisp.innerText = score;
+    
+    if (level === 3) {
+        showMsg("✨ 恭喜獲得黃金牛！ ✨<br>家族獎勵頒發中...");
+    } else {
+        showMsg("成功捕獲！");
+    }
+
+    setTimeout(() => {
+        if (level < 6) {
+            initLevel(level + 1);
+        } else {
+            showMsg("🎉 恭喜通關全 6 關！<br>你是社區最強牛仔！");
+        }
+    }, 2500);
+}
+
+function failCatch() {
+    gameState = 'ANIMATION';
+    showMsg("哎呀！被逃跑了！");
+    setTimeout(() => {
+        initLevel(level); // 重玩本關
+    }, 1500);
+}
+
+function showMsg(text) {
+    msgDisp.innerHTML = text;
+    msgDisp.style.display = 'block';
+}
+
+// --- 輸入控制 ---
+function handleInput() {
+    if (gameState === 'RUNNING' && !lasso.active) {
+        lasso.active = true;
+    } else if (gameState === 'CATCHING') {
+        pullProgress += 7; // 每次點擊增加拉力
+        shakeAmount = 8;   // 增加震動感
+    }
+}
+
+window.addEventListener('mousedown', (e) => { e.preventDefault(); handleInput(); });
+window.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(); });
+
+// 啟動遊戲
+initLevel(1);
+gameLoop();
+
+</script>
+</body>
+</html>
+
