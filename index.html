@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社區抓牛大賽 - 岡聯牧場版</title>
+    <title>社區抓牛大賽 - 岡聯牧場特別版</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
         
-        /* 牧場介紹：直接用程式碼生成文字，解決圖片切到字的問題 */
+        /* 牧場介紹：直接用代碼顯示，保證不被裁切 */
         #ranch-story {
             position: absolute; top: 15px; left: 15px; width: 65%;
             color: white; font-size: 14px; line-height: 1.5;
@@ -32,7 +32,7 @@
 
 <div id="ranch-story">
     <b>岡聯牧場</b><br>
-    創立於民國59年，從兩頭乳牛起家，經營55年飼養約300隻乳牛。
+    創立於民國59年，經營55年飼養約300隻乳牛。<br>
     民國94年成立鮮乳門市，讓遊客體驗真實的酪農生活。
 </div>
 
@@ -58,6 +58,7 @@ const actionBtn = document.getElementById('actionBtn');
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 window.addEventListener('resize', resize); resize();
 
+// 請確認 GitHub 上的圖檔路徑
 const rawBase = `https://raw.githubusercontent.com/cposram/cow/main/`;
 const imgAssets = {
     bg: new Image(), lasso: new Image(), cowNormal: new Image(), 
@@ -65,7 +66,7 @@ const imgAssets = {
     cowLegendary: new Image(), hero: new Image()
 };
 
-// 請確保這張無文字背景圖檔名正確
+// 載入資源
 imgAssets.bg.src = rawBase + 'game_bg_pure.png'; 
 imgAssets.lasso.src = rawBase + 'lasso_loop.png';
 imgAssets.cowNormal.src = rawBase + 'cow_normal.png';
@@ -75,7 +76,7 @@ imgAssets.cowGalaxy.src = rawBase + 'cow_galaxy.png';
 imgAssets.cowLegendary.src = rawBase + 'cow_legendary.png';
 imgAssets.hero.src = rawBase + 'cowboy_hero.png';
 
-let level = 1, score = 0, gameState = 'RUNNING', pullProgress = 0, frameCount = 0;
+let level = 1, score = 0, gameState = 'RUNNING', pullProgress = 0;
 let lasso = { y: 0, active: false, speed: 32 };
 
 class Cow {
@@ -83,13 +84,11 @@ class Cow {
         this.lv = lv;
         const imgs = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
         this.img = imgs[lv-1] || imgs[0];
-        // 放大牛隻尺寸
         this.width = 140 + (lv * 20); this.height = this.width * 0.75;
         this.x = -250; 
-        this.y = canvas.height * 0.82 - this.height; // 站在草地上
+        this.y = canvas.height * 0.82 - this.height;
         this.speed = (5 + lv * 1.3);
-        // 【難度優化】調整後期掙脫力，讓 Benson 也能過關
-        this.strugglePower = 0.35 + (lv * 0.08); 
+        this.strugglePower = 0.3 + (lv * 0.08); // 難度調優，確保後期能過關
     }
     update() {
         if (gameState === 'RUNNING') this.x += this.speed;
@@ -111,22 +110,24 @@ function initLevel(nextLevel) {
 function resetLasso() { lasso.active = false; lasso.y = canvas.height - 120; }
 
 function drawBG() {
-    if (!imgAssets.bg.complete) {
-        ctx.fillStyle = '#87CEEB'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        return;
+    if (imgAssets.bg.complete && imgAssets.bg.naturalWidth !== 0) {
+        const s = Math.max(canvas.width / imgAssets.bg.naturalWidth, canvas.height / imgAssets.bg.naturalHeight);
+        const w = imgAssets.bg.naturalWidth * s, h = imgAssets.bg.naturalHeight * s;
+        ctx.drawImage(imgAssets.bg, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+    } else {
+        // 防藍屏備案：漸層天空
+        let grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grd.addColorStop(0, "#87CEEB");
+        grd.addColorStop(1, "#4CAF50");
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-    // 經典的全螢幕覆蓋算法
-    const s = Math.max(canvas.width / imgAssets.bg.naturalWidth, canvas.height / imgAssets.bg.naturalHeight);
-    const w = imgAssets.bg.naturalWidth * s, h = imgAssets.bg.naturalHeight * s;
-    ctx.drawImage(imgAssets.bg, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
 }
 
 function gameLoop() {
-    frameCount++;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBG();
     
-    // 繪製牛仔，確保在最上層
     if (imgAssets.hero.complete) ctx.drawImage(imgAssets.hero, canvas.width/2 - 60, canvas.height - 180, 120, 150);
     
     currentCow.update(); currentCow.draw();
@@ -162,11 +163,11 @@ function drawBar() {
 
 function successCatch() {
     gameState = 'SUCCESS'; score += level * 100; scoreDisp.innerText = score;
-    if (level < 6) { showMsg("抓到了！下一關！", ""); setTimeout(() => initLevel(level+1), 1200); }
-    else { showMsg("🎉 傳說達成！<br>最強牛仔就是你！", "再玩一次"); }
+    if (level < 6) { showMsg("抓到了！", ""); setTimeout(() => initLevel(level+1), 1000); }
+    else { showMsg("🎉 傳說達成！", "再玩一次"); }
 }
 
-function failCatch() { gameState = 'FAIL'; showMsg("哎呀逃跑了...", "重新挑戰"); }
+function failCatch() { gameState = 'FAIL'; showMsg("逃跑了...", "重試"); }
 
 function showMsg(t, b) { 
     msgDisp.innerHTML = t; 
@@ -175,12 +176,12 @@ function showMsg(t, b) {
     msgContainer.style.display = "block"; 
 }
 
-function handleBtnClick() { if (gameState === 'FAIL' || msgDisp.innerText.includes("傳說")) { score = 0; initLevel(1); } }
+function handleBtnClick() { if (gameState === 'FAIL' || level === 6) { score = 0; initLevel(1); } }
 
 function handleInput(e) {
     if (e) e.preventDefault();
     if (gameState === 'RUNNING' && !lasso.active) lasso.active = true;
-    else if (gameState === 'CATCHING') pullProgress += 15; // 提高玩家點擊拉力
+    else if (gameState === 'CATCHING') pullProgress += 15;
 }
 
 canvas.addEventListener('touchstart', handleInput, {passive: false});
