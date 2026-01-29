@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社區抓牛大賽 - 終極平衡版</title>
+    <title>社區抓牛大賽 - 傳說再臨版</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4CAF50; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
         #ui { position: absolute; top: env(safe-area-inset-top, 20px); left: 20px; color: white; text-shadow: 2px 2px 4px #000; font-size: 22px; pointer-events: none; z-index: 10; }
         #msg-container { 
-            position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%); 
+            position: absolute; top: 35%; /* 向上移，避免擋住主角 */
+            left: 50%; transform: translate(-50%, -50%); 
             text-align: center; display: none; width: 95%; z-index: 20; 
         }
         #msg { color: #FFD700; font-size: 38px; font-weight: bold; text-shadow: 3px 3px 0 #000; margin-bottom: 25px; line-height: 1.4; }
@@ -74,7 +75,7 @@ let pullProgress = 0;
 let shakeAmount = 0;
 let frameCount = 0;
 
-let lasso = { x: 0, y: 0, active: false, speed: 28, radius: 45 };
+let lasso = { x: 0, y: 0, active: false, speed: 30, radius: 50 };
 
 class Cow {
     constructor(lv) {
@@ -85,13 +86,14 @@ class Cow {
         else if (lv === 5) this.img = imgAssets.cowGalaxy;
         else this.img = imgAssets.cowLegendary;
 
-        this.width = (lv >= 4) ? 160 : 130;
+        // 【調整 1】大幅增加牛的尺寸，讓後期更有回憶點與存在感
+        this.width = 140 + (lv * 20); 
         this.height = this.width * 0.75;
-        this.x = -200;
+        this.x = -250;
         this.y = canvas.height * 0.76 - this.height;
-        this.speed = (5 + lv * 1.3);
-        // 【優化點 1】降低掙脫力的成長速度
-        this.strugglePower = 0.25 + (lv * 0.06); 
+        this.speed = (6 + lv * 1.5);
+        // 【調整 2】難度回調：讓後期掙脫力更強
+        this.strugglePower = 0.35 + (lv * 0.15); 
     }
     update() {
         if (gameState === 'RUNNING') {
@@ -125,7 +127,7 @@ function initLevel(nextLevel) {
 
 function resetLasso() {
     lasso.active = false;
-    lasso.y = canvas.height - 100;
+    lasso.y = canvas.height - 120;
     lasso.x = canvas.width / 2;
 }
 
@@ -166,10 +168,17 @@ function gameLoop() {
         ctx.save();
         ctx.translate(offsetX, offsetY);
         drawCoverBackground(imgAssets.bg);
+
+        // 繪製主角 (平常狀態)
+        const hW = 120, hH = 150;
+        if (imgAssets.hero.complete) {
+            ctx.drawImage(imgAssets.hero, canvas.width/2 - hW/2, canvas.height - 200, hW, hH);
+        }
+
         currentCow.update();
         currentCow.draw();
 
-        if (currentCow.x > canvas.width + 150) {
+        if (currentCow.x > canvas.width + 200) {
             currentCow = new Cow(level);
         }
 
@@ -180,11 +189,11 @@ function gameLoop() {
             }
             let cowCenterX = currentCow.x + currentCow.width/2;
             let cowCenterY = currentCow.y + currentCow.height/2;
-            if (Math.abs(lasso.y - cowCenterY) < 45 && Math.abs(canvas.width/2 - cowCenterX) < 65) {
+            if (Math.abs(lasso.y - cowCenterY) < 60 && Math.abs(canvas.width/2 - cowCenterX) < 70) {
                 gameState = 'CATCHING';
-                // 【優化點 2】提高起始進度，讓玩家更有餘裕
-                pullProgress = 55; 
-                shakeAmount = 15;
+                // 【調整 3】初始進度下調回 40，增加緊張感
+                pullProgress = 40; 
+                shakeAmount = 20;
             }
             if (lasso.y < -100) resetLasso();
         }
@@ -192,13 +201,13 @@ function gameLoop() {
         if (gameState === 'CATCHING') {
             pullProgress -= currentCow.strugglePower;
             ctx.beginPath();
-            ctx.moveTo(canvas.width / 2, canvas.height);
+            ctx.moveTo(canvas.width / 2, canvas.height - 100);
             ctx.quadraticCurveTo(
-                canvas.width / 2 + Math.sin(frameCount * 0.3) * 15, canvas.height * 0.7, 
+                canvas.width / 2 + Math.sin(frameCount * 0.3) * 20, canvas.height * 0.6, 
                 currentCow.x + currentCow.width/2, currentCow.y + currentCow.height/2
             );
             ctx.strokeStyle = '#4e342e';
-            ctx.lineWidth = 5;
+            ctx.lineWidth = 6;
             ctx.stroke();
             drawProgressBar();
             if (pullProgress <= 0) failCatch();
@@ -210,13 +219,13 @@ function gameLoop() {
 }
 
 function drawProgressBar() {
-    const barW = canvas.width * 0.6, barH = 15;
-    const x = canvas.width / 2 - barW / 2, y = 100;
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(x - 2, y - 2, barW + 4, barH + 4);
-    ctx.fillStyle = '#f00';
+    const barW = canvas.width * 0.7, barH = 20;
+    const x = canvas.width / 2 - barW / 2, y = 80;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x - 4, y - 4, barW + 8, barH + 8);
+    ctx.fillStyle = '#666';
     ctx.fillRect(x, y, barW, barH);
-    ctx.fillStyle = '#0f0';
+    ctx.fillStyle = (pullProgress > 30) ? '#0f0' : '#f00';
     ctx.fillRect(x, y, (pullProgress/100) * barW, barH);
 }
 
@@ -224,29 +233,35 @@ function drawVictoryScene() {
     drawCoverBackground(imgAssets.bg);
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-    for(let i=0; i<15; i++) {
+
+    // 噴灑效果
+    for(let i=0; i<20; i++) {
         ctx.fillStyle = i % 2 === 0 ? 'gold' : 'white';
         ctx.beginPath();
-        ctx.arc((frameCount*5 + i*100) % canvas.width, (frameCount*2 + i*50) % canvas.height, 5, 0, Math.PI*2);
+        ctx.arc((frameCount*6 + i*80) % canvas.width, (frameCount*3 + i*60) % canvas.height, 6, 0, Math.PI*2);
         ctx.fill();
     }
-    const hW = 120, hH = 150;
+
+    // 主角居中，不被遮擋
+    const hW = 150, hH = 190;
     if (imgAssets.hero.complete) {
-        ctx.drawImage(imgAssets.hero, centerX - hW/2, centerY - 20, hW, hH);
+        ctx.drawImage(imgAssets.hero, centerX - hW/2, centerY - 80, hW, hH);
     }
-    const cows = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
+
+    // 六隻不同等級的牛跟隨，且比例增大
+    const cows = [imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
     cows.forEach((img, i) => {
-        const cw = 80, ch = 60;
+        const cw = 100 + (i * 15), ch = cw * 0.75;
         if (img.complete) {
-            ctx.drawImage(img, centerX - (i*40) - 150, centerY + 50 + Math.sin(frameCount*0.1 + i)*10, cw, ch);
-            ctx.drawImage(img, centerX + (i*40) + 70, centerY + 50 + Math.sin(frameCount*0.1 + i)*10, cw, ch);
+            ctx.drawImage(img, centerX - (i*50) - 180, centerY + 80 + Math.sin(frameCount*0.1 + i)*15, cw, ch);
+            ctx.drawImage(img, centerX + (i*50) + 80, centerY + 80 + Math.sin(frameCount*0.1 + i)*15, cw, ch);
         }
     });
 }
 
 function successCatch() {
     gameState = 'SUCCESS';
-    score += level * 100;
+    score += level * 150;
     scoreDisp.innerText = score;
     if (level < 6) {
         showMsg("成功捕獲！", ""); 
@@ -285,9 +300,9 @@ function handleInput(e) {
     if (gameState === 'RUNNING' && !lasso.active) {
         lasso.active = true;
     } else if (gameState === 'CATCHING') {
-        // 【優化點 3】增加點擊效能，點一下進度跳更多
-        pullProgress += 16; 
-        shakeAmount = 15;
+        // 【調整 4】點擊回饋：稍微調降單次點擊加成，讓過程更有拉扯感
+        pullProgress += 12; 
+        shakeAmount = 18;
     }
 }
 
