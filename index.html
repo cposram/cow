@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社區抓牛大賽 - 岡聯牧場版</title>
+    <title>社區抓牛大賽 - 岡聯牧場傳說達成</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
         
-        /* 牧場介紹：直接用程式碼生成文字，解決圖片切到字的問題 */
+        /* 牧場介紹 */
         #ranch-story {
             position: absolute; top: 15px; left: 15px; width: 65%;
             color: white; font-size: 14px; line-height: 1.5;
@@ -32,7 +32,7 @@
 
 <div id="ranch-story">
     <b>岡聯牧場</b><br>
-    創立於民國59年，從兩頭乳牛起家，至今飼養約300頭乳牛。
+    創立於民國59年，從兩頭乳牛起家，經營55年飼養約300隻乳牛。
     民國94年成立鮮乳門市，讓遊客體驗真實的酪農生活。
 </div>
 
@@ -65,7 +65,6 @@ const imgAssets = {
     cowLegendary: new Image(), hero: new Image()
 };
 
-// 請確保這張無文字背景圖檔名正確
 imgAssets.bg.src = rawBase + 'game_bg.png'; 
 imgAssets.lasso.src = rawBase + 'lasso_loop.png';
 imgAssets.cowNormal.src = rawBase + 'cow_normal.png';
@@ -83,12 +82,10 @@ class Cow {
         this.lv = lv;
         const imgs = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
         this.img = imgs[lv-1] || imgs[0];
-        // 放大牛隻尺寸
         this.width = 140 + (lv * 20); this.height = this.width * 0.75;
         this.x = -250; 
-        this.y = canvas.height * 0.82 - this.height; // 站在草地上
+        this.y = canvas.height * 0.82 - this.height;
         this.speed = (5 + lv * 1.3);
-        // 【難度優化】調整後期掙脫力，讓 Benson 也能過關
         this.strugglePower = 0.35 + (lv * 0.08); 
     }
     update() {
@@ -115,7 +112,6 @@ function drawBG() {
         ctx.fillStyle = '#87CEEB'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         return;
     }
-    // 經典的全螢幕覆蓋算法
     const s = Math.max(canvas.width / imgAssets.bg.naturalWidth, canvas.height / imgAssets.bg.naturalHeight);
     const w = imgAssets.bg.naturalWidth * s, h = imgAssets.bg.naturalHeight * s;
     ctx.drawImage(imgAssets.bg, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
@@ -124,33 +120,105 @@ function drawBG() {
 function gameLoop() {
     frameCount++;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBG();
     
-    // 繪製牛仔，確保在最上層
-    if (imgAssets.hero.complete) ctx.drawImage(imgAssets.hero, canvas.width/2 - 60, canvas.height - 180, 120, 150);
-    
-    currentCow.update(); currentCow.draw();
-    if (currentCow.x > canvas.width + 300) currentCow = new Cow(level);
+    // 【新增】判斷是否為勝利狀態
+    if (gameState === 'VICTORY') {
+        drawVictoryScene();
+    } else {
+        // 原本的遊戲運行邏輯
+        drawBG();
+        if (imgAssets.hero.complete) ctx.drawImage(imgAssets.hero, canvas.width/2 - 60, canvas.height - 180, 120, 150);
+        
+        currentCow.update(); currentCow.draw();
+        if (currentCow.x > canvas.width + 300) currentCow = new Cow(level);
 
-    if (lasso.active && gameState === 'RUNNING') {
-        lasso.y -= lasso.speed;
-        if (imgAssets.lasso.complete) ctx.drawImage(imgAssets.lasso, canvas.width/2-45, lasso.y-45, 90, 90);
-        if (Math.abs(lasso.y - (currentCow.y + currentCow.height/2)) < 60 && Math.abs(canvas.width/2 - (currentCow.x + currentCow.width/2)) < 70) {
-            gameState = 'CATCHING'; pullProgress = 50;
+        if (lasso.active && gameState === 'RUNNING') {
+            lasso.y -= lasso.speed;
+            if (imgAssets.lasso.complete) ctx.drawImage(imgAssets.lasso, canvas.width/2-45, lasso.y-45, 90, 90);
+            if (Math.abs(lasso.y - (currentCow.y + currentCow.height/2)) < 60 && Math.abs(canvas.width/2 - (currentCow.x + currentCow.width/2)) < 70) {
+                gameState = 'CATCHING'; pullProgress = 50;
+            }
+            if (lasso.y < -50) resetLasso();
         }
-        if (lasso.y < -50) resetLasso();
-    }
 
-    if (gameState === 'CATCHING') {
-        pullProgress -= currentCow.strugglePower;
-        ctx.beginPath(); ctx.moveTo(canvas.width/2, canvas.height-120);
-        ctx.lineTo(currentCow.x + currentCow.width/2, currentCow.y + currentCow.height/2);
-        ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 6; ctx.stroke();
-        drawBar();
-        if (pullProgress <= 0) failCatch();
-        else if (pullProgress >= 100) successCatch();
+        if (gameState === 'CATCHING') {
+            pullProgress -= currentCow.strugglePower;
+            ctx.beginPath(); ctx.moveTo(canvas.width/2, canvas.height-120);
+            ctx.lineTo(currentCow.x + currentCow.width/2, currentCow.y + currentCow.height/2);
+            ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 6; ctx.stroke();
+            drawBar();
+            if (pullProgress <= 0) failCatch();
+            else if (pullProgress >= 100) successCatch();
+        }
     }
     requestAnimationFrame(gameLoop);
+}
+
+// 【全新】勝利畫面繪製函式：牛仔牽著六頭牛
+function drawVictoryScene() {
+    drawBG(); // 繪製背景
+
+    // 1. 繪製慶祝彩帶和金幣
+    for(let i=0; i<25; i++) {
+        ctx.fillStyle = i % 3 === 0 ? 'gold' : (i % 3 === 1 ? '#FFD700' : '#FFFFFF');
+        ctx.beginPath();
+        // 讓彩帶飄落
+        const x = (frameCount * 2 + i * 50) % canvas.width;
+        const y = (frameCount * 3 + i * 30) % canvas.height;
+        ctx.arc(x, y, 5 + Math.sin(frameCount*0.1 + i)*2, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    // 2. 定義主角位置 (站在左側草地上)
+    const hW = 130, hH = 160;
+    const heroX = canvas.width * 0.15;
+    const heroY = canvas.height * 0.85 - hH;
+    // 估算主角手的位置，用於畫繩子
+    const handX = heroX + hW * 0.8;
+    const handY = heroY + hH * 0.55;
+
+    if (imgAssets.hero.complete) {
+        ctx.drawImage(imgAssets.hero, heroX, heroY, hW, hH);
+    }
+
+    // 3. 定義六頭戰利品牛
+    const collectedCows = [
+        imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, 
+        imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary
+    ];
+
+    // 4. 繪製牽繩和列隊的牛
+    collectedCows.forEach((img, i) => {
+        if (!img.complete) return;
+
+        // 牛隻參數
+        const baseSize = 90;
+        const scale = 1 + (i * 0.1); // 後面的牛稍微大一點
+        const cowW = baseSize * scale;
+        const cowH = cowW * 0.75;
+
+        // 計算牛的位置，排成一列跟在主角後面
+        const spacing = 65; // 牛之間的間距
+        const cowX = heroX + hW + 20 + (i * spacing);
+        // 讓牛稍微錯落排列，更有隊伍感
+        const cowY = canvas.height * 0.86 - cowH + Math.sin(frameCount*0.05 + i)*5;
+
+        // 計算牛脖子的位置，用於連接繩子
+        const neckX = cowX + cowW * 0.2;
+        const neckY = cowY + cowH * 0.6;
+
+        // 畫繩子 (從主角手到牛脖子)
+        ctx.beginPath();
+        ctx.moveTo(handX, handY);
+        // 畫一條稍微下垂的曲線，比較自然
+        ctx.quadraticCurveTo((handX + neckX)/2, handY + 30 + (i*5), neckX, neckY);
+        ctx.strokeStyle = '#5D4037'; // 繩子顏色
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // 畫牛
+        ctx.drawImage(img, cowX, cowY, cowW, cowH);
+    });
 }
 
 function drawBar() {
@@ -161,9 +229,16 @@ function drawBar() {
 }
 
 function successCatch() {
-    gameState = 'SUCCESS'; score += level * 100; scoreDisp.innerText = score;
-    if (level < 6) { showMsg("抓到了！下一關！", ""); setTimeout(() => initLevel(level+1), 1200); }
-    else { showMsg("🎉 傳說達成！<br>最強牛仔就是你！", "再玩一次"); }
+    score += level * 100; scoreDisp.innerText = score;
+    if (level < 6) { 
+        gameState = 'SUCCESS';
+        showMsg("抓到了！下一關！", ""); 
+        setTimeout(() => initLevel(level+1), 1200); 
+    } else { 
+        // 【修正】最後一關成功後，將狀態設為 VICTORY
+        gameState = 'VICTORY'; 
+        showMsg("🎉 傳說達成！<br>寶貝牛全部蒐集完成！", "再玩一次"); 
+    }
 }
 
 function failCatch() { gameState = 'FAIL'; showMsg("哎呀逃跑了...", "重新挑戰"); }
@@ -175,12 +250,17 @@ function showMsg(t, b) {
     msgContainer.style.display = "block"; 
 }
 
-function handleBtnClick() { if (gameState === 'FAIL' || msgDisp.innerText.includes("傳說")) { score = 0; initLevel(1); } }
+function handleBtnClick() { 
+    // 點擊「再玩一次」後重置遊戲
+    if (gameState === 'FAIL' || gameState === 'VICTORY') { 
+        score = 0; scoreDisp.innerText = 0; initLevel(1); 
+    } 
+}
 
 function handleInput(e) {
     if (e) e.preventDefault();
     if (gameState === 'RUNNING' && !lasso.active) lasso.active = true;
-    else if (gameState === 'CATCHING') pullProgress += 15; // 提高玩家點擊拉力
+    else if (gameState === 'CATCHING') pullProgress += 15;
 }
 
 canvas.addEventListener('touchstart', handleInput, {passive: false});
