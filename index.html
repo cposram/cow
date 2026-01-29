@@ -3,26 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社區抓牛大賽 - 傳說再臨版</title>
+    <title>社區抓牛大賽 - 岡聯牧場傳承版</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #4CAF50; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
-        #ui { position: absolute; top: env(safe-area-inset-top, 20px); left: 20px; color: white; text-shadow: 2px 2px 4px #000; font-size: 22px; pointer-events: none; z-index: 10; }
+        #ui { position: absolute; top: 15px; right: 20px; color: white; text-shadow: 2px 2px 4px #000; font-size: 20px; pointer-events: none; z-index: 10; text-align: right; }
+        
+        /* 牧場介紹：放在左上角天空處，解決圖片裁切問題 */
+        #ranch-story {
+            position: absolute; top: 15px; left: 15px; width: 60%;
+            color: rgba(255, 255, 255, 0.85); font-size: 13px; line-height: 1.5;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5); pointer-events: none; z-index: 5;
+        }
+
         #msg-container { 
-            position: absolute; top: 35%; /* 向上移，避免擋住主角 */
-            left: 50%; transform: translate(-50%, -50%); 
-            text-align: center; display: none; width: 95%; z-index: 20; 
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); 
+            text-align: center; display: none; width: 90%; z-index: 20; 
         }
-        #msg { color: #FFD700; font-size: 38px; font-weight: bold; text-shadow: 3px 3px 0 #000; margin-bottom: 25px; line-height: 1.4; }
+        #msg { color: #FFD700; font-size: 34px; font-weight: bold; text-shadow: 3px 3px 0 #000; margin-bottom: 20px; }
         .game-btn { 
-            background: linear-gradient(#FFB74D, #FF9800); color: white; border: none; padding: 15px 35px; 
-            font-size: 22px; border-radius: 50px; cursor: pointer; 
-            box-shadow: 0 6px 0 #E65100; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            background: linear-gradient(#FFB74D, #FF9800); color: white; border: none; padding: 12px 30px; 
+            font-size: 20px; border-radius: 50px; cursor: pointer; box-shadow: 0 5px 0 #E65100;
         }
-        .game-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #E65100; }
     </style>
 </head>
 <body>
+
+<div id="ranch-story">
+    <b>岡聯牧場</b><br>
+    創立於民國59年，從兩頭乳牛起家，迄今經營55年飼養約300隻乳牛。
+    民國94年成立門市部，提供鮮乳相關製品，讓遊客體驗真實的酪農生活。
+</div>
 
 <div id="ui">
     🏆 關卡: <span id="lv">1</span> / 6 <br>
@@ -39,18 +50,12 @@
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const lvDisp = document.getElementById('lv');
-const scoreDisp = document.getElementById('score');
-const msgContainer = document.getElementById('msg-container');
-const msgDisp = document.getElementById('msg');
+const lvDisp = document.getElementById('lv'), scoreDisp = document.getElementById('score');
+const msgContainer = document.getElementById('msg-container'), msgDisp = document.getElementById('msg');
 const actionBtn = document.getElementById('actionBtn');
 
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resize);
-resize();
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
 
 const rawBase = `https://raw.githubusercontent.com/cposram/cow/main/`;
 const imgAssets = {
@@ -59,7 +64,8 @@ const imgAssets = {
     cowLegendary: new Image(), hero: new Image()
 };
 
-imgAssets.bg.src = rawBase + 'game_bg.png';
+// 建議更換一張「純背景」無文字的岡聯牧場圖片
+imgAssets.bg.src = rawBase + 'game_bg_pure.png'; 
 imgAssets.lasso.src = rawBase + 'lasso_loop.png';
 imgAssets.cowNormal.src = rawBase + 'cow_normal.png';
 imgAssets.cowGold.src = rawBase + 'cow_gold.png';
@@ -68,43 +74,111 @@ imgAssets.cowGalaxy.src = rawBase + 'cow_galaxy.png';
 imgAssets.cowLegendary.src = rawBase + 'cow_legendary.png';
 imgAssets.hero.src = rawBase + 'cowboy_hero.png';
 
-let level = 1;
-let score = 0;
-let gameState = 'RUNNING'; 
-let pullProgress = 0;
-let shakeAmount = 0;
-let frameCount = 0;
-
-let lasso = { x: 0, y: 0, active: false, speed: 30, radius: 50 };
+let level = 1, score = 0, gameState = 'RUNNING', pullProgress = 0, frameCount = 0;
+let lasso = { y: 0, active: false, speed: 32 };
 
 class Cow {
     constructor(lv) {
         this.lv = lv;
-        if (lv <= 2) this.img = imgAssets.cowNormal;
-        else if (lv === 3) this.img = imgAssets.cowGold;
-        else if (lv === 4) this.img = imgAssets.cowDiamond;
-        else if (lv === 5) this.img = imgAssets.cowGalaxy;
-        else this.img = imgAssets.cowLegendary;
-
-        // 【調整 1】大幅增加牛的尺寸，讓後期更有回憶點與存在感
-        this.width = 140 + (lv * 20); 
-        this.height = this.width * 0.75;
-        this.x = -250;
-        this.y = canvas.height * 0.76 - this.height;
-        this.speed = (6 + lv * 1.5);
-        // 【調整 2】難度回調：讓後期掙脫力更強
-        this.strugglePower = 0.35 + (lv * 0.15); 
+        const imgs = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
+        this.img = imgs[lv-1] || imgs[0];
+        this.width = 130 + (lv * 15); this.height = this.width * 0.75;
+        this.x = -200; this.y = canvas.height * 0.8 - this.height;
+        this.speed = (5 + lv * 1.2);
+        // 【優化點】平衡 5-6 關難度，係數從 0.15 降至 0.1
+        this.strugglePower = 0.3 + (lv * 0.1); 
     }
     update() {
-        if (gameState === 'RUNNING') {
-            this.x += this.speed;
-        } else if (gameState === 'CATCHING') {
-            let targetX = (canvas.width / 2) + (100 - pullProgress) * 2;
-            this.x += (targetX - this.x) * 0.1; 
+        if (gameState === 'RUNNING') this.x += this.speed;
+        else if (gameState === 'CATCHING') {
+            this.x += ((canvas.width/2 + (100 - pullProgress)*1.5) - this.x) * 0.1;
         }
     }
-    draw() {
-        if (this.img.complete && this.img.naturalWidth !== 0) {
+    draw() { if (this.img.complete) ctx.drawImage(this.img, this.x, this.y, this.width, this.height); }
+}
+
+let currentCow = new Cow(1);
+
+function initLevel(nextLevel) {
+    level = nextLevel; lvDisp.innerText = level;
+    currentCow = new Cow(level); gameState = 'RUNNING';
+    msgContainer.style.display = 'none'; resetLasso();
+}
+
+function resetLasso() { lasso.active = false; lasso.y = canvas.height - 120; }
+
+function drawBG() {
+    if (!imgAssets.bg.complete) return;
+    const s = Math.max(canvas.width / imgAssets.bg.naturalWidth, canvas.height / imgAssets.bg.naturalHeight);
+    const w = imgAssets.bg.naturalWidth * s, h = imgAssets.bg.naturalHeight * s;
+    ctx.drawImage(imgAssets.bg, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+}
+
+function gameLoop() {
+    frameCount++;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (gameState === 'VICTORY') { drawVictory(); } 
+    else {
+        drawBG();
+        // 繪製牛仔，確保不被 UI 遮擋
+        if (imgAssets.hero.complete) ctx.drawImage(imgAssets.hero, canvas.width/2 - 60, canvas.height - 180, 120, 150);
+        
+        currentCow.update(); currentCow.draw();
+        if (currentCow.x > canvas.width + 200) currentCow = new Cow(level);
+
+        if (lasso.active && gameState === 'RUNNING') {
+            lasso.y -= lasso.speed;
+            if (imgAssets.lasso.complete) ctx.drawImage(imgAssets.lasso, canvas.width/2-40, lasso.y-40, 80, 80);
+            if (Math.abs(lasso.y - (currentCow.y + currentCow.height/2)) < 50 && Math.abs(canvas.width/2 - (currentCow.x + currentCow.width/2)) < 60) {
+                gameState = 'CATCHING'; pullProgress = 45;
+            }
+            if (lasso.y < -50) resetLasso();
+        }
+
+        if (gameState === 'CATCHING') {
+            pullProgress -= currentCow.strugglePower;
+            ctx.beginPath(); ctx.moveTo(canvas.width/2, canvas.height-100);
+            ctx.lineTo(currentCow.x + currentCow.width/2, currentCow.y + currentCow.height/2);
+            ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 5; ctx.stroke();
+            drawBar();
+            if (pullProgress <= 0) failCatch();
+            else if (pullProgress >= 100) successCatch();
+        }
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+function drawBar() {
+    const w = canvas.width * 0.6;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(canvas.width/2 - w/2, 100, w, 15);
+    ctx.fillStyle = pullProgress > 30 ? '#0f0' : '#f00';
+    ctx.fillRect(canvas.width/2 - w/2, 100, (pullProgress/100)*w, 15);
+}
+
+function successCatch() {
+    gameState = 'SUCCESS'; score += level * 100; scoreDisp.innerText = score;
+    if (level < 6) { showMsg("捕獲成功！", ""); setTimeout(() => initLevel(level+1), 1000); }
+    else { gameState = 'VICTORY'; showMsg("🎉 傳說達成！<br>你是牧場最強牛仔！", "再玩一次"); }
+}
+
+function failCatch() { gameState = 'FAIL'; showMsg("被逃跑了...", "重試"); }
+
+function showMsg(t, b) { msgDisp.innerHTML = t; actionBtn.innerText = b; actionBtn.style.display = b ? "inline-block" : "none"; msgContainer.style.display = "block"; }
+
+function handleBtnClick() { if (gameState === 'FAIL') initLevel(level); else if (gameState === 'VICTORY') { score = 0; initLevel(1); } }
+
+function handleInput(e) {
+    if (e) e.preventDefault();
+    if (gameState === 'RUNNING' && !lasso.active) lasso.active = true;
+    else if (gameState === 'CATCHING') pullProgress += 14; // 【優化點】點擊力量從 12 提升至 14
+}
+
+canvas.addEventListener('touchstart', handleInput, {passive: false});
+window.addEventListener('mousedown', (e) => { if(e.button===0) handleInput(e); });
+initLevel(1); gameLoop();
+</script>
+</body>
+</html>
             ctx.drawImage(this.img, this.x, this.y, this.width, this.height);
         } else {
             ctx.fillStyle = '#FFF';
