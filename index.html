@@ -111,7 +111,7 @@
 // 如果要清空分數：請把下面這行的 // 拿掉，重新整理網頁一次
 // 清空後記得把 // 加回去，不然紀錄會一直被清空
 // =========================================================
- localStorage.clear(); 
+// localStorage.clear(); 
 // =========================================================
 
 const canvas = document.getElementById('gameCanvas');
@@ -152,7 +152,7 @@ let precisionScore = 0;
 let combo = 0; 
 
 let highScore = parseInt(localStorage.getItem('cow_highScore') || 1000); 
-let holderName = localStorage.getItem('cow_holderName') || 'Benson'; 
+let holderName = localStorage.getItem('cow_holderName') || 'Lucien'; 
 updateRecordUI();
 
 function updateRecordUI() {
