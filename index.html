@@ -3,25 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社區抓牛大賽 - 完美收繩處決版</title>
+    <title>岡聯牧場抓牛大賽</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
+        
+        /* 故事文字 */
         #ranch-story {
-            position: absolute; top: 15px; left: 15px; width: 65%;
+            position: absolute; top: 15px; left: 15px; width: 60%;
             color: white; font-size: 13px; line-height: 1.5;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8); pointer-events: none; z-index: 5;
         }
-        #ui { position: absolute; top: 15px; right: 15px; color: white; text-shadow: 2px 2px 4px #000; font-size: 20px; z-index: 10; text-align: right; }
+
+        /* UI 介面：分數與紀錄 */
+        #ui { 
+            position: absolute; top: 15px; right: 15px; 
+            color: white; text-shadow: 2px 2px 4px #000; 
+            font-size: 20px; z-index: 10; text-align: right; 
+        }
+        /* 紀錄保持人小字樣式 */
+        #high-score-box {
+            font-size: 14px; color: #FFD700; margin-top: 5px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
+        }
+
+        /* 訊息視窗 (通關/失敗) */
         #msg-container { 
             position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); 
             text-align: center; display: none; width: 90%; z-index: 20; 
         }
         #msg { color: #FFD700; font-size: 32px; font-weight: bold; text-shadow: 3px 3px 0 #000; margin-bottom: 20px; }
+        
+        /* 破紀錄專用輸入視窗 */
+        #record-modal {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85); border: 2px solid gold; border-radius: 15px;
+            padding: 20px; text-align: center; display: none; z-index: 30; width: 80%;
+            box-shadow: 0 0 20px gold;
+        }
+        #record-modal h2 { color: #FFD700; margin: 0 0 10px 0; }
+        #record-modal p { color: white; margin: 5px 0; }
+        #playerNameInput {
+            font-size: 20px; padding: 5px; width: 70%; text-align: center;
+            border-radius: 5px; border: none; margin-bottom: 15px;
+        }
+
+        /* 按鈕樣式 */
         .game-btn { 
             background: linear-gradient(#FFB74D, #FF9800); color: white; border: none; padding: 12px 30px; 
             font-size: 20px; border-radius: 50px; cursor: pointer; box-shadow: 0 5px 0 #E65100; font-weight: bold;
         }
+        .small-btn { padding: 8px 20px; font-size: 16px; margin-top: 5px; }
+
+        /* 浮動得分特效 */
+        .floating-score {
+            position: absolute; color: #FFF; font-weight: bold; font-size: 24px;
+            text-shadow: 2px 2px 0 #000; pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+        }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-50px); } }
     </style>
 </head>
 <body>
@@ -35,11 +75,23 @@
 <div id="ui">
     🏆 關卡: <span id="lv">1</span> / 6 <br>
     💰 分數: <span id="score">0</span>
+    <div id="high-score-box">
+        👑 紀錄: <span id="recordHolder">Benson</span> <span id="recordScore">2400</span>
+    </div>
 </div>
 
 <div id="msg-container">
     <div id="msg"></div>
     <button id="actionBtn" class="game-btn" onclick="handleBtnClick()"></button>
+</div>
+
+<div id="record-modal">
+    <h2>🎉 新紀錄達成！</h2>
+    <p>太強了！您刷新了最高分！</p>
+    <p>請留下大名：</p>
+    <input type="text" id="playerNameInput" maxlength="8" placeholder="您的名字">
+    <br>
+    <button class="game-btn small-btn" onclick="submitRecord()">登錄榮耀</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -50,17 +102,21 @@ const ctx = canvas.getContext('2d');
 const lvDisp = document.getElementById('lv'), scoreDisp = document.getElementById('score');
 const msgContainer = document.getElementById('msg-container'), msgDisp = document.getElementById('msg');
 const actionBtn = document.getElementById('actionBtn');
+const recordModal = document.getElementById('record-modal');
+const recordHolderDisp = document.getElementById('recordHolder');
+const recordScoreDisp = document.getElementById('recordScore');
+const nameInput = document.getElementById('playerNameInput');
 
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 window.addEventListener('resize', resize); resize();
 
+// --- 資源載入 ---
 const rawBase = `https://raw.githubusercontent.com/cposram/cow/main/`;
 const imgAssets = {
     bg: new Image(), lasso: new Image(), cowNormal: new Image(), 
     cowGold: new Image(), cowDiamond: new Image(), cowGalaxy: new Image(), 
     cowLegendary: new Image(), hero: new Image()
 };
-
 imgAssets.bg.src = rawBase + 'game_bg.png'; 
 imgAssets.lasso.src = rawBase + 'lasso_loop.png';
 imgAssets.cowNormal.src = rawBase + 'cow_normal.png';
@@ -70,9 +126,24 @@ imgAssets.cowGalaxy.src = rawBase + 'cow_galaxy.png';
 imgAssets.cowLegendary.src = rawBase + 'cow_legendary.png';
 imgAssets.hero.src = rawBase + 'cowboy_hero.png';
 
-// 遊戲狀態新增 'REELING' (收繩中)
+// --- 全域變數 ---
 let level = 1, score = 0, gameState = 'RUNNING', pullProgress = 0, frameCount = 0;
 let lasso = { y: 0, active: false, speed: 22 };
+
+// 評分相關變數
+let levelStartTime = 0; // 用於計算速度獎勵
+let missCount = 0;      // 該關卡失誤次數
+let precisionScore = 0; // 暫存精準度分數
+
+// --- 讀取紀錄 ---
+let highScore = parseInt(localStorage.getItem('cow_highScore') || 2400); // 預設 2400
+let holderName = localStorage.getItem('cow_holderName') || 'Benson'; // 預設 Benson
+updateRecordUI();
+
+function updateRecordUI() {
+    recordHolderDisp.innerText = holderName;
+    recordScoreDisp.innerText = highScore;
+}
 
 class Cow {
     constructor(lv) {
@@ -80,46 +151,31 @@ class Cow {
         const imgs = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
         this.img = imgs[lv-1] || imgs[0];
         
-        // 初始大小 (遠處)
         this.baseWidth = (130 + (lv * 18)) * 0.75;
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
-        
-        // 【修改點1：位置修正】
-        // 之前是 0.35，現在改為 0.40，讓牛更貼近柏油路面
         this.baseY = canvas.height * 0.40; 
         this.y = this.baseY;
-        
         this.x = -200; 
         this.speed = (3 + lv * 1.5); 
         this.strugglePower = 0.3 + (lv * 0.12); 
+        this.reelingSpeed = 0;
     }
     update() {
         if (gameState === 'RUNNING') {
             this.x += this.speed;
-        }
-        else if (gameState === 'CATCHING') {
-            // 掙扎震動
+        } else if (gameState === 'CATCHING') {
             this.x += (Math.random()-0.5) * 5; 
             this.y = this.baseY + (Math.random()-0.5) * 3;
-        }
-        else if (gameState === 'REELING') {
-            // 【修改點2：收繩階段邏輯】
-            
-            // 1. 水平修正：將牛拉向畫面正中央
-            // 使用 lerp (線性插值) 讓它平滑地被拖到中間
-            const centerX = canvas.width / 2 - this.width / 2;
-            this.x += (centerX - this.x) * 0.1;
-
-            // 2. 垂直拉近：牛往畫面下方移動 (靠近玩家)
-            this.y += 6; // 拉近速度
-
-            // 3. 透視變大：越近越大
-            this.width *= 1.015;
+        } else if (gameState === 'REELING') {
+            const targetCenterX = canvas.width / 2 - this.width / 2;
+            this.x += (targetCenterX - this.x) * 0.05;
+            this.reelingSpeed += 0.5; 
+            this.y += (4 + this.reelingSpeed); 
+            const scaleFactor = 1 + (this.y - this.baseY) * 0.0015;
+            this.width = this.baseWidth * scaleFactor;
             this.height = this.width * 0.75;
-
-            // 4. 掙扎稍微減弱 (已經被拖著走了)
-            this.x += (Math.random()-0.5) * 2; 
+            if (this.reelingSpeed > 20) this.reelingSpeed = 20; 
         }
     }
     draw() { if (this.img.complete) ctx.drawImage(this.img, this.x, this.y, this.width, this.height); }
@@ -128,9 +184,18 @@ class Cow {
 let currentCow = new Cow(1);
 
 function initLevel(nextLevel) {
-    level = nextLevel; lvDisp.innerText = level;
-    currentCow = new Cow(level); gameState = 'RUNNING';
-    msgContainer.style.display = 'none'; resetLasso();
+    level = nextLevel; 
+    lvDisp.innerText = level;
+    
+    // 重置評分數據
+    levelStartTime = Date.now();
+    missCount = 0;
+    precisionScore = 0;
+
+    currentCow = new Cow(level); 
+    gameState = 'RUNNING';
+    msgContainer.style.display = 'none'; 
+    resetLasso();
 }
 
 function resetLasso() { 
@@ -140,13 +205,12 @@ function resetLasso() {
 
 function drawBG() {
     if (imgAssets.bg.complete && imgAssets.bg.naturalWidth !== 0) {
-        const scale = canvas.width / imgAssets.bg.naturalWidth;
+        const scale = Math.max(canvas.width / imgAssets.bg.naturalWidth, canvas.height / imgAssets.bg.naturalHeight);
+        const w = imgAssets.bg.naturalWidth * scale;
         const h = imgAssets.bg.naturalHeight * scale;
-        ctx.drawImage(imgAssets.bg, 0, 0, canvas.width, h);
-        if (h < canvas.height) {
-            ctx.fillStyle = "#4CAF50"; 
-            ctx.fillRect(0, h-2, canvas.width, canvas.height - h + 2);
-        }
+        const x = (canvas.width - w) / 2;
+        const y = (canvas.height - h) * 0.8; 
+        ctx.drawImage(imgAssets.bg, x, y, w, h);
     } else {
         ctx.fillStyle = '#87CEEB'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -160,43 +224,46 @@ function gameLoop() {
         drawVictoryScene();
     } else {
         drawBG();
-        
-        // 遊戲中隱藏人物，保持第一人稱
-        
         currentCow.update(); currentCow.draw();
         
-        // 跑出畫面重生邏輯 (只在 RUNNING 時有效)
         if (gameState === 'RUNNING' && currentCow.x > canvas.width + 200) {
             currentCow = new Cow(level);
         }
         
-        // 繩索發射邏輯
         if (lasso.active && gameState === 'RUNNING') {
             lasso.y -= lasso.speed; 
             
-            // 透視縮放
             const startY = canvas.height;
-            const endY = canvas.height * 0.40; // 配合新的牛位置
-            const totalDist = startY - endY;
-            const currentDist = lasso.y - endY;
-            const distRatio = Math.max(0, currentDist / totalDist); 
-            
-            const lassoScale = 0.35 + 0.65 * distRatio; 
-            const lassoSize = 90 * lassoScale;
+            const endY = canvas.height * 0.40;
+            const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
+            const lassoSize = 90 * (0.35 + 0.65 * distRatio);
 
             if (imgAssets.lasso.complete) ctx.drawImage(imgAssets.lasso, canvas.width/2 - lassoSize/2, lasso.y - lassoSize/2, lassoSize, lassoSize);
             
             let cowCY = currentCow.y + currentCow.height/2;
             let cowCX = currentCow.x + currentCow.width/2;
 
+            // 命中判定
             if (Math.abs(lasso.y - cowCY) < 50 && Math.abs(canvas.width/2 - cowCX) < 60) {
+                // --- 計算精準度分數 (0~50分) ---
+                // 距離越近分數越高
+                let dist = Math.sqrt(Math.pow(lasso.y - cowCY, 2) + Math.pow(canvas.width/2 - cowCX, 2));
+                let maxDist = 60; // 判定半徑
+                // 準度百分比
+                let accuracy = Math.max(0, (maxDist - dist) / maxDist); 
+                precisionScore = Math.floor(accuracy * 50);
+
                 gameState = 'CATCHING'; pullProgress = 50;
             }
             
-            if (lasso.y < cowCY - 80) resetLasso();
+            // 沒中
+            if (lasso.y < cowCY - 80) {
+                missCount++; // 紀錄失誤
+                showFloatingText("Miss!", canvas.width/2, canvas.height/2, '#FF4444');
+                resetLasso();
+            }
         }
         
-        // 抓捕中 (角力階段)
         if (gameState === 'CATCHING') {
             pullProgress -= currentCow.strugglePower;
             
@@ -205,54 +272,32 @@ function gameLoop() {
             const cowNeckX = currentCow.x + currentCow.width * 0.3;
             const cowNeckY = currentCow.y + currentCow.height * 0.4;
 
-            ctx.beginPath(); 
-            ctx.moveTo(handX, handY);
-            ctx.lineTo(cowNeckX, cowNeckY);
-            
-            ctx.strokeStyle = '#5D4037'; 
-            ctx.lineWidth = 2 + (pullProgress/100)*2; 
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(cowNeckX, cowNeckY);
+            ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 2 + (pullProgress/100)*2; ctx.stroke();
             
             drawBar();
             
             if (pullProgress <= 0) failCatch();
-            // 【修改點3：血條滿了不直接贏，而是進入拖曳階段】
-            else if (pullProgress >= 100) {
-                gameState = 'REELING';
-            }
+            else if (pullProgress >= 100) gameState = 'REELING';
         }
         
-        // 【修改點4：收繩拖曳階段 (Reeling)】
         if (gameState === 'REELING') {
             const handX = canvas.width/2; 
             const handY = canvas.height;
-            // 連接到牛脖子
-            const cowNeckX = currentCow.x + currentCow.width * 0.3;
-            const cowNeckY = currentCow.y + currentCow.height * 0.4;
+            const cowNeckX = currentCow.x + currentCow.width * 0.35;
+            const cowNeckY = currentCow.y + currentCow.height * 0.5;
 
-            ctx.beginPath(); 
-            ctx.moveTo(handX, handY);
-            ctx.lineTo(cowNeckX, cowNeckY);
-            
-            // 繩子這時候拉得很緊，很粗
-            ctx.strokeStyle = '#5D4037'; 
-            ctx.lineWidth = 5; 
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(cowNeckX, cowNeckY);
+            ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 4 + (frameCount % 5) * 0.5; ctx.stroke();
 
-            // 判斷是否拉到眼前了
-            // 當牛的 Y 軸超過畫面的一定比例 (例如 85%)，就算抓到了
-            if (currentCow.y > canvas.height * 0.8) {
-                successCatch();
-            }
+            if (currentCow.y > canvas.height * 0.7) successCatch();
         }
     }
     requestAnimationFrame(gameLoop);
 }
 
-// 勝利畫面 (雙排)
 function drawVictoryScene() {
     drawBG();
-    
     for(let i=0; i<25; i++) {
         ctx.fillStyle = ['#FFD700', '#FFF', '#FFA500'][i%3];
         ctx.beginPath();
@@ -266,11 +311,9 @@ function drawVictoryScene() {
     const heroW = 90, heroH = 120;
     const heroX = padding;
     const heroY = canvas.height * 0.85 - heroH; 
-
     const allCows = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
     const backRowCows = allCows.slice(0, 3);
     const frontRowCows = allCows.slice(3, 6);
-
     const startX = heroX + heroW * 0.5;
     const availableW = canvas.width - startX - padding;
     const stepX = availableW / 3; 
@@ -294,7 +337,6 @@ function drawVictoryScene() {
         const h = w * 0.75;
         const x = startX + (i * stepX) + 20; 
         const y = canvas.height * 0.92 - h + Math.sin(frameCount*0.05 + i + 3)*8; 
-
         ctx.beginPath();
         ctx.moveTo(heroX + heroW*0.8, heroY + heroH*0.6); 
         ctx.quadraticCurveTo(x, y + h/2, x + 10, y + h*0.4); 
@@ -310,15 +352,72 @@ function drawBar() {
     ctx.fillRect(canvas.width/2 - w/2, 100, (pullProgress/100)*w, 20);
 }
 
+// 顯示浮動文字 (分數特效)
+function showFloatingText(text, x, y, color) {
+    const el = document.createElement('div');
+    el.className = 'floating-score';
+    el.innerText = text;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.color = color || '#FFF';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1000);
+}
+
 function successCatch() {
-    score += level * 100; scoreDisp.innerText = score;
+    // --- 計算本關分數 ---
+    let timeTaken = (Date.now() - levelStartTime) / 1000;
+    // 速度獎勵：基礎 50 分，每過 1 秒扣 2 分，最低 0 分
+    let speedBonus = Math.max(0, Math.floor(50 - timeTaken * 2));
+    // 失誤扣分：每次扣 20 分
+    let penalty = missCount * 20;
+    
+    // 本關總分 = 基礎分(等級*100) + 精準度(0-50) + 速度(0-50) - 扣分
+    let levelScore = (level * 100) + precisionScore + speedBonus - penalty;
+    if (levelScore < 50) levelScore = 50; // 保底分數
+
+    score += levelScore; 
+    scoreDisp.innerText = score;
+    
+    // 顯示詳細得分提示
+    let bonusText = `+${levelScore} (準度+${precisionScore} 速度+${speedBonus})`;
+    if (missCount > 0) bonusText += ` 失誤-${penalty}`;
+    showFloatingText(bonusText, canvas.width/2 - 50, canvas.height/2 - 50, '#FFD700');
+
     if (level < 6) { 
-        gameState = 'SUCCESS'; showMsg("成功捕獲！", ""); 
-        setTimeout(() => initLevel(level+1), 1000); 
+        gameState = 'SUCCESS'; 
+        showMsg(`捕獲成功！<br><span style="font-size:18px">${bonusText}</span>`, ""); 
+        setTimeout(() => initLevel(level+1), 2000); // 稍微停久一點讓人看分數
     } else { 
-        gameState = 'VICTORY'; 
-        showMsg("🎉 傳說達成！<br>寶貝牛全部收藏成功！", "再玩一次"); 
+        // 檢查是否破紀錄
+        if (score > highScore) {
+            gameState = 'VICTORY';
+            // 隱藏一般UI，顯示破紀錄視窗
+            msgContainer.style.display = 'none';
+            recordModal.style.display = 'block';
+        } else {
+            gameState = 'VICTORY'; 
+            showMsg("🎉 傳說達成！<br>寶貝牛全部收藏成功！", "再玩一次"); 
+        }
     }
+}
+
+// 提交新紀錄
+function submitRecord() {
+    let name = nameInput.value.trim();
+    if (!name) name = "神秘牧場主";
+    
+    highScore = score;
+    holderName = name;
+    
+    // 存入 LocalStorage
+    localStorage.setItem('cow_highScore', highScore);
+    localStorage.setItem('cow_holderName', holderName);
+    
+    updateRecordUI();
+    
+    recordModal.style.display = 'none';
+    showMsg(`🎉 新紀錄保持人：${name}！<br>分數：${score}`, "再玩一次");
 }
 
 function failCatch() { gameState = 'FAIL'; showMsg("逃跑了...", "重試"); }
