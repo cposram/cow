@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社區抓牛大賽 - 岡聯牧場大遊行版</title>
+    <title>社區抓牛大賽 - 岡聯牧場大遊行版 (修正版)</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
@@ -61,7 +61,6 @@ const imgAssets = {
     cowLegendary: new Image(), hero: new Image()
 };
 
-// 請上傳最新的直向高解析度圖片並確保檔名一致
 imgAssets.bg.src = rawBase + 'game_bg.png'; 
 imgAssets.lasso.src = rawBase + 'lasso_loop.png';
 imgAssets.cowNormal.src = rawBase + 'cow_normal.png';
@@ -79,16 +78,33 @@ class Cow {
         this.lv = lv;
         const imgs = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
         this.img = imgs[lv-1] || imgs[0];
-        this.width = 130 + (lv * 18); this.height = this.width * 0.75;
+        // 為了配合遠距離，稍微調整牛的大小，讓它在遠處看起來比例正常
+        this.baseWidth = 130 + (lv * 18);
+        this.width = this.baseWidth; 
+        this.height = this.width * 0.75;
         this.x = -250; 
         this.y = canvas.height * 0.8 - this.height;
         this.speed = (4 + lv * 1.4);
         this.strugglePower = 0.3 + (lv * 0.08); 
     }
     update() {
-        if (gameState === 'RUNNING') this.x += this.speed;
+        if (gameState === 'RUNNING') {
+            this.x += this.speed;
+            this.width = this.baseWidth; // 跑動時維持原大小
+            this.height = this.width * 0.75;
+        }
         else if (gameState === 'CATCHING') {
-            this.x += ((canvas.width/2 + (100 - pullProgress)*1.2) - this.x) * 0.1;
+            // 【修改點1：增加距離與張力】
+            // 基礎距離設為 canvas.width/2 + 120 (比原來更遠)
+            // 動態距離：(100 - pullProgress) * 3.5 -> 當進度低時，牛會退得非常遠，繩子拉很長
+            const targetX = (canvas.width/2 + 120) + (100 - pullProgress) * 3.5;
+            
+            // 使用較平滑的移動係數 0.08，讓拉扯感有彈性
+            this.x += (targetX - this.x) * 0.08;
+            
+            // 視覺透視：稍微縮小一點點牛，因為它被拉遠了 (95%大小)
+            this.width = this.baseWidth * 0.95; 
+            this.height = this.width * 0.75;
         }
     }
     draw() { if (this.img.complete) ctx.drawImage(this.img, this.x, this.y, this.width, this.height); }
@@ -106,12 +122,11 @@ function resetLasso() { lasso.active = false; lasso.y = canvas.height - 120; }
 
 function drawBG() {
     if (imgAssets.bg.complete && imgAssets.bg.naturalWidth !== 0) {
-        // 直向圖片繪製：寬度對齊，底部填補
         const scale = canvas.width / imgAssets.bg.naturalWidth;
         const h = imgAssets.bg.naturalHeight * scale;
         ctx.drawImage(imgAssets.bg, 0, 0, canvas.width, h);
         if (h < canvas.height) {
-            ctx.fillStyle = "#4CAF50"; // 底部若有空隙用草地綠填補
+            ctx.fillStyle = "#4CAF50"; 
             ctx.fillRect(0, h-2, canvas.width, canvas.height - h + 2);
         }
     } else {
@@ -128,20 +143,40 @@ function gameLoop() {
         drawBG();
         if (imgAssets.hero.complete) ctx.drawImage(imgAssets.hero, canvas.width/2 - 60, canvas.height - 180, 120, 150);
         currentCow.update(); currentCow.draw();
+        
         if (currentCow.x > canvas.width + 300) currentCow = new Cow(level);
+        
         if (lasso.active && gameState === 'RUNNING') {
             lasso.y -= lasso.speed;
             if (imgAssets.lasso.complete) ctx.drawImage(imgAssets.lasso, canvas.width/2-45, lasso.y-45, 90, 90);
-            if (Math.abs(lasso.y - (currentCow.y + currentCow.height/2)) < 60 && Math.abs(canvas.width/2 - (currentCow.x + currentCow.width/2)) < 70) {
+            
+            // 判定範圍稍微放寬，比較好抓
+            let cowCenterX = currentCow.x + currentCow.width/2;
+            let cowCenterY = currentCow.y + currentCow.height/2;
+            
+            if (Math.abs(lasso.y - cowCenterY) < 70 && Math.abs(canvas.width/2 - cowCenterX) < 80) {
                 gameState = 'CATCHING'; pullProgress = 50;
             }
             if (lasso.y < -50) resetLasso();
         }
+        
         if (gameState === 'CATCHING') {
             pullProgress -= currentCow.strugglePower;
-            ctx.beginPath(); ctx.moveTo(canvas.width/2, canvas.height-120);
-            ctx.lineTo(currentCow.x + currentCow.width/2, currentCow.y + currentCow.height/2);
-            ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 6; ctx.stroke();
+            
+            // 畫繩索：加上一點點隨機抖動，模擬用力時的震動
+            let shake = (Math.random() - 0.5) * 2; 
+            
+            ctx.beginPath(); 
+            // 起點：主角的手
+            ctx.moveTo(canvas.width/2, canvas.height-120);
+            // 終點：牛的中心 (因為牛被推遠了，線會自動變長)
+            ctx.lineTo(currentCow.x + currentCow.width/2 + shake, currentCow.y + currentCow.height/2 + shake);
+            
+            // 線條樣式：顏色加深，根據拉力改變粗細
+            ctx.strokeStyle = '#5D4037'; 
+            ctx.lineWidth = 4 + (pullProgress/100)*2; // 進度越高線越粗(穩)，快斷時變細
+            ctx.stroke();
+            
             drawBar();
             if (pullProgress <= 0) failCatch();
             else if (pullProgress >= 100) successCatch();
@@ -150,41 +185,77 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// 【最終勝利大遊行優化】
+// 【修改點2：最終勝利大遊行 - 全員入鏡版】
 function drawVictoryScene() {
     drawBG();
     // 噴發特效
-    for(let i=0; i<15; i++) {
-        ctx.fillStyle = i % 2 === 0 ? 'gold' : 'white';
+    for(let i=0; i<20; i++) {
+        ctx.fillStyle = i % 3 === 0 ? 'gold' : (i%3===1 ? '#FFD700' : 'white');
         ctx.beginPath();
-        ctx.arc((frameCount*5 + i*100) % canvas.width, (frameCount*2 + i*50) % canvas.height, 5, 0, Math.PI*2);
+        let x = (frameCount*3 + i*80) % canvas.width;
+        let y = (frameCount*2 + i*40) % canvas.height;
+        ctx.arc(x, y, 6, 0, Math.PI*2);
         ctx.fill();
     }
 
-    // 主角：移到畫面最左邊一點，讓出空間給後面的牛
-    const hW = 140, hH = 170;
-    const heroX = canvas.width * 0.1;
+    // 計算版面配置
+    // 讓主角在最左邊 (留一點邊距)
+    const paddingLeft = 20;
+    const paddingRight = 20;
+    
+    // 主角尺寸
+    const hW = 100, hH = 130; 
+    const heroX = paddingLeft;
     const heroY = canvas.height * 0.82 - hH;
+
     if (imgAssets.hero.complete) ctx.drawImage(imgAssets.hero, heroX, heroY, hW, hH);
 
     const collectedCows = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
     
+    // 計算剩餘寬度給6隻牛
+    // 起點是主角右側，終點是畫面右側扣除邊距
+    const startX = heroX + hW - 30; // -30 讓第一隻牛稍微疊在主角後面
+    const availableWidth = canvas.width - startX - paddingRight;
+    
+    // 每隻牛可以分配到的「步進距離」
+    // 如果螢幕很寬，距離就大；螢幕窄，距離就小(重疊多)
+    const stepX = availableWidth / collectedCows.length;
+
     // 從第一頭到第六頭牛
     collectedCows.forEach((img, i) => {
         if (!img.complete) return;
-        // 牛隻尺寸加大，更有成就感
-        const cowW = 100 + (i * 12);
+        
+        // 動態計算牛的尺寸：根據螢幕寬度微調，避免在手機上過大
+        // 基礎寬度 90，隨等級變大，但有用 Math.min 限制最大值
+        let baseScale = Math.min(1.2, canvas.width / 450); 
+        const cowW = (90 + (i * 10)) * baseScale;
         const cowH = cowW * 0.75;
-        // 排成兩列或稍微重疊的隊伍感
-        const rowOffset = i % 2 === 0 ? 0 : 25;
-        const cowX = heroX + hW - 10 + (i * 45);
-        const cowY = canvas.height * 0.83 - cowH + rowOffset + Math.sin(frameCount*0.08 + i)*8;
+        
+        // 位置計算
+        const cowX = startX + (i * stepX);
+        // 上下浮動動畫
+        const cowY = canvas.height * 0.83 - cowH + Math.sin(frameCount*0.08 + i)*6;
 
-        // 畫牽繩：從主角手部（約 heroX + 100, heroY + 100）到牛脖子
+        // 畫牽繩
         ctx.beginPath();
-        ctx.moveTo(heroX + 110, heroY + 110);
-        ctx.quadraticCurveTo(cowX, cowY, cowX + 20, cowY + 30);
-        ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 2.5; ctx.stroke();
+        if (i === 0) {
+            // 第一隻連主角
+            ctx.moveTo(heroX + hW * 0.8, heroY + hH * 0.6);
+        } else {
+            // 後面的連前面的牛屁股
+            const prevCowX = startX + ((i-1) * stepX);
+            const prevCowW = (90 + ((i-1) * 10)) * baseScale;
+            const prevCowH = prevCowW * 0.75;
+            const prevCowY = canvas.height * 0.83 - prevCowH + Math.sin(frameCount*0.08 + (i-1))*6;
+            ctx.moveTo(prevCowX + prevCowW * 0.7, prevCowY + prevCowH * 0.6);
+        }
+        
+        // 連到當前牛的脖子
+        ctx.quadraticCurveTo(
+            (cowX + (i===0?heroX:cowX-stepX))/2, cowY + 50, // 控制點讓繩子垂一點
+            cowX + 10, cowY + cowH * 0.4
+        );
+        ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 2; ctx.stroke();
 
         ctx.drawImage(img, cowX, cowY, cowW, cowH);
     });
