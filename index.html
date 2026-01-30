@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>岡聯牧場抓牛大賽</title>
     <style>
-        /* 【關鍵修正】body 依然鎖定，但允許輸入框互動 */
+        /* body 鎖定但允許輸入框互動 */
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
         
@@ -24,6 +24,13 @@
             font-size: 14px; color: #FFD700; margin-top: 5px;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
         }
+        /* Combo 顯示樣式 */
+        #combo-box {
+            font-size: 24px; color: #FF4444; font-weight: bold; display: none;
+            text-shadow: 2px 2px 0 #FFF; margin-top: 5px;
+            animation: pulse 0.5s infinite alternate;
+        }
+        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
 
         #msg-container { 
             position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); 
@@ -37,27 +44,22 @@
             background: rgba(0, 0, 0, 0.9); border: 3px solid gold; border-radius: 15px;
             padding: 25px; text-align: center; display: none; z-index: 100; width: 85%;
             box-shadow: 0 0 25px gold;
-            /* 確保視窗可以接收點擊 */
             pointer-events: auto;
         }
         #record-modal h2 { color: #FFD700; margin: 0 0 15px 0; font-size: 28px; }
         #record-modal p { color: white; margin: 10px 0; font-size: 18px; }
         
-        /* 【關鍵修正】輸入框樣式：強制允許觸控操作和文字選擇 */
         #playerNameInput {
             font-size: 24px; padding: 10px; width: 80%; text-align: center;
             border-radius: 8px; border: 2px solid #FFD700; margin-bottom: 20px;
             background: #fff; color: #000;
-            /* 這裡解除了 body 的鎖定，讓鍵盤可以彈出來 */
             touch-action: manipulation; 
-            user-select: text;
-            -webkit-user-select: text;
+            user-select: text; -webkit-user-select: text;
         }
 
         .game-btn { 
             background: linear-gradient(#FFB74D, #FF9800); color: white; border: none; padding: 12px 30px; 
             font-size: 20px; border-radius: 50px; cursor: pointer; box-shadow: 0 5px 0 #E65100; font-weight: bold;
-            /* 按鈕也要允許操作 */
             touch-action: manipulation;
         }
         .small-btn { padding: 10px 25px; font-size: 18px; margin-top: 5px; }
@@ -81,8 +83,9 @@
 <div id="ui">
     🏆 關卡: <span id="lv">1</span> / 6 <br>
     💰 分數: <span id="score">0</span>
+    <div id="combo-box">🔥 Combo x<span id="comboCount">0</span></div>
     <div id="high-score-box">
-        👑 紀錄: <span id="recordHolder">Benson</span> <span id="recordScore">1000</span>
+        👑 紀錄: <span id="recordHolder">Lucien</span> <span id="recordScore">1000</span>
     </div>
 </div>
 
@@ -103,8 +106,13 @@
 <canvas id="gameCanvas"></canvas>
 
 <script>
-// 【提醒】測試完畢正式上線前，建議把下面這行刪掉，不然每次重整紀錄都會不見
-// localStorage.clear(); 
+// =========================================================
+// 【測試用】清除紀錄指令
+// 如果要清空分數：請把下面這行的 // 拿掉，重新整理網頁一次
+// 清空後記得把 // 加回去，不然紀錄會一直被清空
+// =========================================================
+ localStorage.clear(); 
+// =========================================================
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -115,6 +123,8 @@ const recordModal = document.getElementById('record-modal');
 const recordHolderDisp = document.getElementById('recordHolder');
 const recordScoreDisp = document.getElementById('recordScore');
 const nameInput = document.getElementById('playerNameInput');
+const comboBox = document.getElementById('combo-box');
+const comboCountDisp = document.getElementById('comboCount');
 
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 window.addEventListener('resize', resize); resize();
@@ -139,6 +149,7 @@ let lasso = { y: 0, active: false, speed: 22 };
 let levelStartTime = 0;
 let missCount = 0;
 let precisionScore = 0;
+let combo = 0; 
 
 let highScore = parseInt(localStorage.getItem('cow_highScore') || 1000); 
 let holderName = localStorage.getItem('cow_holderName') || 'Benson'; 
@@ -147,6 +158,15 @@ updateRecordUI();
 function updateRecordUI() {
     recordHolderDisp.innerText = holderName;
     recordScoreDisp.innerText = highScore;
+}
+
+function updateComboUI() {
+    if (combo > 1) {
+        comboBox.style.display = 'block';
+        comboCountDisp.innerText = combo;
+    } else {
+        comboBox.style.display = 'none';
+    }
 }
 
 class Cow {
@@ -159,7 +179,12 @@ class Cow {
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
         
-        // 【修正位置】：0.48 確保牛在路面上
+        // ==============================================
+        // 【高度設定】
+        // 0.48 = 畫面中間偏上
+        // 0.65 = 畫面下方 (馬路上)
+        // 目前設定為 0.65，如需調整請改這裡
+        // ==============================================
         this.baseY = canvas.height * 0.48;  
         this.y = this.baseY;
         
@@ -200,6 +225,7 @@ function initLevel(nextLevel) {
     gameState = 'RUNNING';
     msgContainer.style.display = 'none'; 
     resetLasso();
+    updateComboUI();
 }
 
 function resetLasso() { 
@@ -238,8 +264,11 @@ function gameLoop() {
             lasso.y -= lasso.speed; 
             
             const startY = canvas.height;
-            // 【修正瞄準點】：配合 0.48
+            // ==============================================
+            // 【繩索高度設定】需與上面的牛高度一致
+            // ==============================================
             const endY = canvas.height * 0.48;  
+            
             const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
             const lassoSize = 90 * (0.35 + 0.65 * distRatio);
 
@@ -257,6 +286,9 @@ function gameLoop() {
             }
             
             if (lasso.y < cowCY - 80) {
+                if (combo > 0) showFloatingText("Combo Break!", canvas.width/2, canvas.height/2, '#FF4444');
+                combo = 0;
+                updateComboUI();
                 missCount++; 
                 showFloatingText("Miss!", canvas.width/2, canvas.height/2, '#FF4444');
                 resetLasso();
@@ -356,18 +388,25 @@ function showFloatingText(text, x, y, color) {
 }
 
 function successCatch() {
+    combo++;
+    updateComboUI();
+
     let timeTaken = (Date.now() - levelStartTime) / 1000;
     let speedBonus = Math.max(0, Math.floor(50 - timeTaken * 2));
     let penalty = missCount * 20;
     
-    let levelScore = (level * 100) + precisionScore + speedBonus - penalty;
-    if (levelScore < 50) levelScore = 50; 
+    let baseScore = (level * 100) + precisionScore + speedBonus - penalty;
+    if (baseScore < 50) baseScore = 50; 
+
+    let comboMultiplier = 1 + (combo - 1) * 0.2; 
+    let levelScore = Math.floor(baseScore * comboMultiplier);
 
     score += levelScore; 
     scoreDisp.innerText = score;
     
-    let bonusText = `+${levelScore} (準度+${precisionScore} 速度+${speedBonus})`;
-    if (missCount > 0) bonusText += ` 失誤-${penalty}`;
+    let bonusText = `+${levelScore}`;
+    if (combo > 1) bonusText += ` (Combo x${comboMultiplier.toFixed(1)}!)`;
+    
     showFloatingText(bonusText, canvas.width/2 - 50, canvas.height/2 - 50, '#FFD700');
 
     if (level < 6) { 
@@ -375,12 +414,11 @@ function successCatch() {
         showMsg(`捕獲成功！<br><span style="font-size:18px">${bonusText}</span>`, ""); 
         setTimeout(() => initLevel(level+1), 2000); 
     } else { 
-        if (score > highScore) {
+        // 平手也能破紀錄 (>=)
+        if (score >= highScore) {
             gameState = 'VICTORY';
             msgContainer.style.display = 'none';
             recordModal.style.display = 'block';
-            
-            // 【重要】自動讓輸入框獲得焦點，並確保可以點擊
             nameInput.focus();
         } else {
             gameState = 'VICTORY'; 
@@ -401,34 +439,31 @@ function submitRecord() {
     showMsg(`🎉 新紀錄保持人：${name}！<br>分數：${score}`, "再玩一次");
 }
 
-function failCatch() { gameState = 'FAIL'; showMsg("逃跑了...", "重試"); }
+function failCatch() { 
+    combo = 0; 
+    updateComboUI();
+    gameState = 'FAIL'; 
+    showMsg("逃跑了...", "重試"); 
+}
+
 function showMsg(t, b) { msgDisp.innerHTML = t; actionBtn.innerText = b; actionBtn.style.display = b ? "inline-block" : "none"; msgContainer.style.display = "block"; }
-function handleBtnClick() { if (gameState === 'FAIL' || gameState === 'VICTORY') { score = 0; initLevel(1); } }
 
-// 【核心修正】點擊處理邏輯
+function handleBtnClick() { if (gameState === 'FAIL' || gameState === 'VICTORY') { score = 0; combo = 0; initLevel(1); } }
+
 function handleInput(e) {
-    // 1. 如果點擊的目標是輸入框(INPUT)或按鈕(BUTTON)，表示玩家想互動，絕對不要阻止！
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') {
-        return; // 直接結束，讓瀏覽器處理輸入框的焦點
-    }
-
-    // 2. 只有在點擊非UI區域時，才阻止預設行為(防滑動)並丟繩子
-    if (e.type === 'touchstart') {
-        // e.preventDefault(); // 註解掉，因為上面已經過濾了INPUT，這裡太暴力可能會影響其他操作
-    }
-
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+    if (e.type === 'touchstart') {} 
+    
     if (gameState === 'RUNNING' && !lasso.active) lasso.active = true;
     else if (gameState === 'CATCHING') pullProgress += 15;
 }
 
-// 移除 window 的監聽，只監聽 canvas，這樣當對話框浮在 canvas 上面時，點擊對話框不會觸發丟繩子
 canvas.addEventListener('touchstart', handleInput, {passive: false});
 canvas.addEventListener('mousedown', (e) => { if(e.button===0) handleInput(e); });
 
-// 額外確保輸入框可點擊 (針對部分手機瀏覽器)
 nameInput.addEventListener('touchstart', (e) => {
-    e.stopPropagation(); // 阻止事件傳遞給 canvas
-    nameInput.focus();   // 強制獲得焦點
+    e.stopPropagation(); 
+    nameInput.focus();   
 });
 
 initLevel(1); gameLoop();
