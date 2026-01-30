@@ -196,7 +196,9 @@ if (dbRef) {
         if (data && Array.isArray(data)) {
             leaderboard = data;
         } else {
-            dbRef.set(leaderboard);
+            // dbRef.set(leaderboard);
+console.log("資料庫是空的，等待新紀錄...");
+
         }
         updateLeaderboardUI();
     });
