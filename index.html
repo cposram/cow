@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>岡聯牧場抓牛大賽 - 完全調校版</title>
+    <title>岡聯牧場抓牛大賽 - 全球爭霸戰</title>
     <style>
         /* 基礎設定 */
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
@@ -100,17 +100,17 @@ const GAME_CONFIG = {
     cow: {
         y_pos_ratio: 0.48,    // 牛的垂直位置 (0~1)
         width_base: 135,      // 牛的大小
-        width_growth: 18,
+        width_growth: 1,
         scale: 0.75,
         
         speed_base: 3,        // 牛跑多快
         speed_growth: 1.2,    
         
-        struggle_base: 0.50,   // 牛抵抗力 (越小越容易拉回來)
-        struggle_growth: 0.3  // 等級越高，牛越有力
+        struggle_base: 1.70,   // 牛抵抗力 (越小越容易拉回來)
+        struggle_growth: 1.7 // 等級越高，牛越有力
     },
     player: {
-        click_power: 45       // 【這裡！】玩家點一下拉回多少進度 (預設15)
+        click_power: 30       // 【這裡！】玩家點一下拉回多少進度 (預設15)
                               // 覺得太難可以改成 18 或 20
                               // 覺得太簡單可以改成 10
     },
