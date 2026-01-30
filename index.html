@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>岡聯牧場抓牛大賽 - 全球爭霸版</title>
+    <title>岡聯牧場抓牛大賽 - 全球爭霸</title>
     <style>
         /* 基礎設定 */
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
@@ -191,7 +191,7 @@ class Cow {
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
         // 高度設定為 0.65 (馬路)
-        this.baseY = canvas.height * 0.65;  
+        this.baseY = canvas.height * 0.48;  
         this.y = this.baseY;
         this.x = -200; 
         this.speed = (3 + lv * 1.5); 
@@ -269,7 +269,7 @@ function gameLoop() {
             lasso.y -= lasso.speed; 
             
             const startY = canvas.height;
-            const endY = canvas.height * 0.65;  
+            const endY = canvas.height * 0.48;  
             const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
             const lassoSize = 90 * (0.35 + 0.65 * distRatio);
 
