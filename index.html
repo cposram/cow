@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>岡聯牧場抓牛大賽 - 全球前三爭霸戰</title>
+    <title>岡聯牧場抓牛大賽 - 完全調校版</title>
     <style>
         /* 基礎設定 */
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
@@ -94,21 +94,28 @@
 
 <script>
 // =========================================================================
-// 🔧 遊戲參數調校區 (GAME CONFIG) - 修改這裡即可調整手感
+// 🔧 遊戲參數調校區 (GAME CONFIG)
 // =========================================================================
 const GAME_CONFIG = {
     cow: {
-        y_pos_ratio: 0.48,    // 牛的垂直位置 (0~1)，0.65 代表在畫面 65% 高度 (柏油路)
-        width_base: 135,      // 牛的基礎寬度 (LV1 的大小)
-        width_growth: 18,     // 每升一級，牛變寬多少
-        scale: 0.75,          // 整體縮放比例
-        speed_base: 3,        // 基礎跑速 (數字越大跑越快)
-        speed_growth: 0.7,    // 每級增加的速度
-        struggle_base: 0.5,   // 基礎抵抗力 (數字越大越難拉)
-        struggle_growth: 0.2 // 每級增加的抵抗力
+        y_pos_ratio: 0.48,    // 牛的垂直位置 (0~1)
+        width_base: 135,      // 牛的大小
+        width_growth: 18,
+        scale: 0.75,
+        
+        speed_base: 3,        // 牛跑多快
+        speed_growth: 1.2,    
+        
+        struggle_base: 0.50,   // 牛抵抗力 (越小越容易拉回來)
+        struggle_growth: 0.3  // 等級越高，牛越有力
+    },
+    player: {
+        click_power: 45       // 【這裡！】玩家點一下拉回多少進度 (預設15)
+                              // 覺得太難可以改成 18 或 20
+                              // 覺得太簡單可以改成 10
     },
     rope: {
-        target_y_ratio: 0.48  // 繩索瞄準的高度 (建議跟牛的位置 y_pos_ratio 一樣)
+        target_y_ratio: 0.48  // 繩索高度
     }
 };
 // =========================================================================
@@ -131,7 +138,7 @@ try {
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
     dbRef = database.ref('global_leaderboard_v3'); 
-    console.log("已連接至雲端資料庫 (三雄版)");
+    console.log("已連接至雲端資料庫");
 } catch (e) {
     console.error("Firebase 連線失敗:", e);
 }
@@ -224,7 +231,6 @@ class Cow {
         const imgs = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
         this.img = imgs[lv-1] || imgs[0];
         
-        // 【使用設定檔參數】
         this.baseWidth = (GAME_CONFIG.cow.width_base + (lv * GAME_CONFIG.cow.width_growth)) * GAME_CONFIG.cow.scale;
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
@@ -307,7 +313,6 @@ function gameLoop() {
             lasso.y -= lasso.speed; 
             
             const startY = canvas.height;
-            // 【使用設定檔參數】
             const endY = canvas.height * GAME_CONFIG.rope.target_y_ratio;  
             
             const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
@@ -510,8 +515,12 @@ function handleBtnClick() { if (gameState === 'FAIL' || gameState === 'VICTORY')
 
 function handleInput(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+    
+    // ===================================================
+    // 【這裡應用了設定檔參數】
+    // ===================================================
     if (gameState === 'RUNNING' && !lasso.active) lasso.active = true;
-    else if (gameState === 'CATCHING') pullProgress += 15;
+    else if (gameState === 'CATCHING') pullProgress += GAME_CONFIG.player.click_power;
 }
 
 canvas.addEventListener('touchstart', handleInput, {passive: false});
