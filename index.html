@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>岡聯牧場抓牛大賽</title>
     <style>
+        /* 【關鍵修正】body 依然鎖定，但允許輸入框互動 */
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
         
@@ -30,24 +31,34 @@
         }
         #msg { color: #FFD700; font-size: 32px; font-weight: bold; text-shadow: 3px 3px 0 #000; margin-bottom: 20px; }
         
-        /* 破紀錄視窗樣式優化，確保層級最高 */
+        /* 破紀錄視窗 */
         #record-modal {
             position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(0, 0, 0, 0.9); border: 3px solid gold; border-radius: 15px;
             padding: 25px; text-align: center; display: none; z-index: 100; width: 85%;
             box-shadow: 0 0 25px gold;
+            /* 確保視窗可以接收點擊 */
+            pointer-events: auto;
         }
         #record-modal h2 { color: #FFD700; margin: 0 0 15px 0; font-size: 28px; }
         #record-modal p { color: white; margin: 10px 0; font-size: 18px; }
+        
+        /* 【關鍵修正】輸入框樣式：強制允許觸控操作和文字選擇 */
         #playerNameInput {
             font-size: 24px; padding: 10px; width: 80%; text-align: center;
             border-radius: 8px; border: 2px solid #FFD700; margin-bottom: 20px;
             background: #fff; color: #000;
+            /* 這裡解除了 body 的鎖定，讓鍵盤可以彈出來 */
+            touch-action: manipulation; 
+            user-select: text;
+            -webkit-user-select: text;
         }
 
         .game-btn { 
             background: linear-gradient(#FFB74D, #FF9800); color: white; border: none; padding: 12px 30px; 
             font-size: 20px; border-radius: 50px; cursor: pointer; box-shadow: 0 5px 0 #E65100; font-weight: bold;
+            /* 按鈕也要允許操作 */
+            touch-action: manipulation;
         }
         .small-btn { padding: 10px 25px; font-size: 18px; margin-top: 5px; }
 
@@ -84,7 +95,7 @@
     <h2>🎉 新紀錄達成！</h2>
     <p>太強了！您刷新了最高分！</p>
     <p>請留下大名：</p>
-    <input type="text" id="playerNameInput" maxlength="8" placeholder="點擊輸入名字">
+    <input type="text" id="playerNameInput" maxlength="8" placeholder="點擊輸入名字" onclick="this.focus()">
     <br>
     <button class="game-btn small-btn" onclick="submitRecord()">登錄榮耀</button>
 </div>
@@ -92,7 +103,7 @@
 <canvas id="gameCanvas"></canvas>
 
 <script>
-// 強制清除一次紀錄 (測試完後請記得刪除或註解這一行)
+// 【提醒】測試完畢正式上線前，建議把下面這行刪掉，不然每次重整紀錄都會不見
  localStorage.clear(); 
 
 const canvas = document.getElementById('gameCanvas');
@@ -148,7 +159,7 @@ class Cow {
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
         
-        // 【修正位置】：改為 0.48，讓牛真的降到畫面下方的馬路上
+        // 【修正位置】：0.48 確保牛在路面上
         this.baseY = canvas.height * 0.48;  
         this.y = this.baseY;
         
@@ -227,7 +238,7 @@ function gameLoop() {
             lasso.y -= lasso.speed; 
             
             const startY = canvas.height;
-            // 【修正瞄準點】：配合牛的新位置 0.65
+            // 【修正瞄準點】：配合 0.48
             const endY = canvas.height * 0.48;  
             const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
             const lassoSize = 90 * (0.35 + 0.65 * distRatio);
@@ -242,7 +253,6 @@ function gameLoop() {
                 let maxDist = 60; 
                 let accuracy = Math.max(0, (maxDist - dist) / maxDist); 
                 precisionScore = Math.floor(accuracy * 50);
-
                 gameState = 'CATCHING'; pullProgress = 50;
             }
             
@@ -259,11 +269,9 @@ function gameLoop() {
             const handY = canvas.height;
             const cowNeckX = currentCow.x + currentCow.width * 0.3;
             const cowNeckY = currentCow.y + currentCow.height * 0.4;
-
             ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(cowNeckX, cowNeckY);
             ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 2 + (pullProgress/100)*2; ctx.stroke();
             drawBar();
-            
             if (pullProgress <= 0) failCatch();
             else if (pullProgress >= 100) gameState = 'REELING';
         }
@@ -273,10 +281,8 @@ function gameLoop() {
             const handY = canvas.height;
             const cowNeckX = currentCow.x + currentCow.width * 0.35;
             const cowNeckY = currentCow.y + currentCow.height * 0.5;
-
             ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(cowNeckX, cowNeckY);
             ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 4 + (frameCount % 5) * 0.5; ctx.stroke();
-
             if (currentCow.y > canvas.height * 0.7) successCatch();
         }
     }
@@ -293,7 +299,6 @@ function drawVictoryScene() {
         ctx.arc(x, y, 5, 0, Math.PI*2);
         ctx.fill();
     }
-
     const padding = 10;
     const heroW = 90, heroH = 120;
     const heroX = padding;
@@ -374,8 +379,9 @@ function successCatch() {
             gameState = 'VICTORY';
             msgContainer.style.display = 'none';
             recordModal.style.display = 'block';
-            // 讓輸入框自動獲得焦點，方便手機輸入
-            setTimeout(() => document.getElementById('playerNameInput').focus(), 100);
+            
+            // 【重要】自動讓輸入框獲得焦點，並確保可以點擊
+            nameInput.focus();
         } else {
             gameState = 'VICTORY'; 
             showMsg("🎉 傳說達成！<br>寶貝牛全部收藏成功！", "再玩一次"); 
@@ -399,25 +405,31 @@ function failCatch() { gameState = 'FAIL'; showMsg("逃跑了...", "重試"); }
 function showMsg(t, b) { msgDisp.innerHTML = t; actionBtn.innerText = b; actionBtn.style.display = b ? "inline-block" : "none"; msgContainer.style.display = "block"; }
 function handleBtnClick() { if (gameState === 'FAIL' || gameState === 'VICTORY') { score = 0; initLevel(1); } }
 
-// 【修正重點】輸入處理邏輯
+// 【核心修正】點擊處理邏輯
 function handleInput(e) {
-    // 1. 如果點擊的目標是 INPUT 或 BUTTON，表示玩家在操作介面，直接返回，不做遊戲處理
+    // 1. 如果點擊的目標是輸入框(INPUT)或按鈕(BUTTON)，表示玩家想互動，絕對不要阻止！
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') {
-        return; 
+        return; // 直接結束，讓瀏覽器處理輸入框的焦點
     }
 
-    // 2. 只有在點擊畫布空白處時，才需要阻止預設行為 (防止捲動)，並進行遊戲操作
-    if (e.type !== 'mousedown') { // mousedown 不需要 preventDefault，否則會影響焦點
-        if (e.cancelable) e.preventDefault();
+    // 2. 只有在點擊非UI區域時，才阻止預設行為(防滑動)並丟繩子
+    if (e.type === 'touchstart') {
+        // e.preventDefault(); // 註解掉，因為上面已經過濾了INPUT，這裡太暴力可能會影響其他操作
     }
 
     if (gameState === 'RUNNING' && !lasso.active) lasso.active = true;
     else if (gameState === 'CATCHING') pullProgress += 15;
 }
 
+// 移除 window 的監聽，只監聽 canvas，這樣當對話框浮在 canvas 上面時，點擊對話框不會觸發丟繩子
 canvas.addEventListener('touchstart', handleInput, {passive: false});
-// 改為監聽 canvas 而不是 window，避免攔截到對話框的點擊
 canvas.addEventListener('mousedown', (e) => { if(e.button===0) handleInput(e); });
+
+// 額外確保輸入框可點擊 (針對部分手機瀏覽器)
+nameInput.addEventListener('touchstart', (e) => {
+    e.stopPropagation(); // 阻止事件傳遞給 canvas
+    nameInput.focus();   // 強制獲得焦點
+});
 
 initLevel(1); gameLoop();
 </script>
