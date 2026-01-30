@@ -97,6 +97,11 @@
 <canvas id="gameCanvas"></canvas>
 
 <script>
+// 【重要】這行是用來強制清除舊紀錄的
+// 測試完畢正式上線前，建議把下面這行 localStorage.clear() 刪掉或註解掉
+// 這樣玩家的紀錄才能保留
+localStorage.clear(); 
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const lvDisp = document.getElementById('lv'), scoreDisp = document.getElementById('score');
@@ -136,8 +141,9 @@ let missCount = 0;      // 該關卡失誤次數
 let precisionScore = 0; // 暫存精準度分數
 
 // --- 讀取紀錄 ---
-let highScore = parseInt(localStorage.getItem('cow_highScore') || 1000); // 預設 1000
-let holderName = localStorage.getItem('cow_holderName') || 'Benson'; // 預設 Benson
+// 如果已經 clear() 過，這裡就會讀取到預設值 1000
+let highScore = parseInt(localStorage.getItem('cow_highScore') || 1000); 
+let holderName = localStorage.getItem('cow_holderName') || 'Benson'; 
 updateRecordUI();
 
 function updateRecordUI() {
@@ -154,7 +160,9 @@ class Cow {
         this.baseWidth = (130 + (lv * 18)) * 0.75;
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
-        this.baseY = canvas.height * 0.45;  // 牛的高度
+        
+        // 【修正點1】：高度改為 0.48，讓牛更低
+        this.baseY = canvas.height * 0.48;  
         this.y = this.baseY;
         this.x = -200; 
         this.speed = (3 + lv * 1.5); 
@@ -234,7 +242,8 @@ function gameLoop() {
             lasso.y -= lasso.speed; 
             
             const startY = canvas.height;
-            const endY = canvas.height * 0.45;  // 繩索高度
+            // 【修正點2】：繩索瞄準點也改為 0.48，確保透視正確
+            const endY = canvas.height * 0.48;  
             const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
             const lassoSize = 90 * (0.35 + 0.65 * distRatio);
 
