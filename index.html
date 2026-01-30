@@ -154,7 +154,7 @@ class Cow {
         this.baseWidth = (130 + (lv * 18)) * 0.75;
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
-        this.baseY = canvas.height * 0.48;  // 牛的高度
+        this.baseY = canvas.height * 0.45;  // 牛的高度
         this.y = this.baseY;
         this.x = -200; 
         this.speed = (3 + lv * 1.5); 
@@ -234,7 +234,7 @@ function gameLoop() {
             lasso.y -= lasso.speed; 
             
             const startY = canvas.height;
-            const endY = canvas.height * 0.48;  // 繩索高度
+            const endY = canvas.height * 0.45;  // 繩索高度
             const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
             const lassoSize = 90 * (0.35 + 0.65 * distRatio);
 
