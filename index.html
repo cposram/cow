@@ -3,22 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>岡聯牧場抓牛大賽 - 全球爭霸</title>
+    <title>岡聯牧場抓牛大賽 - 雙雄爭霸版</title>
     <style>
         /* 基礎設定 */
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
         
         #ranch-story { position: absolute; top: 15px; left: 15px; width: 60%; color: white; font-size: 13px; line-height: 1.5; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); pointer-events: none; z-index: 5; }
+        
+        /* UI 調整：讓排行榜靠右對齊，並支援多行 */
         #ui { position: absolute; top: 15px; right: 15px; color: white; text-shadow: 2px 2px 4px #000; font-size: 20px; z-index: 10; text-align: right; }
-        #high-score-box { font-size: 14px; color: #FFD700; margin-top: 5px; text-shadow: 1px 1px 2px rgba(0,0,0,0.9); }
+        
+        /* 排行榜樣式優化 */
+        #leaderboard-box { 
+            font-size: 14px; margin-top: 8px; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 8px;
+            text-shadow: 1px 1px 1px rgba(0,0,0,1);
+        }
+        .rank-row { margin-bottom: 2px; display: block; }
+        .rank-gold { color: #FFD700; font-weight: bold; }   /* 金色 */
+        .rank-silver { color: #C0C0C0; font-weight: bold; } /* 銀色 */
+
         #combo-box { font-size: 24px; color: #FF4444; font-weight: bold; display: none; text-shadow: 2px 2px 0 #FFF; margin-top: 5px; animation: pulse 0.5s infinite alternate; }
         @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
         
         #msg-container { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); text-align: center; display: none; width: 90%; z-index: 20; }
         #msg { color: #FFD700; font-size: 32px; font-weight: bold; text-shadow: 3px 3px 0 #000; margin-bottom: 20px; }
         
-        /* 破紀錄視窗 */
         #record-modal {
             position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(0, 0, 0, 0.9); border: 3px solid gold; border-radius: 15px;
@@ -29,7 +39,6 @@
         #record-modal h2 { color: #FFD700; margin: 0 0 15px 0; font-size: 28px; }
         #record-modal p { color: white; margin: 10px 0; font-size: 18px; }
         
-        /* 輸入框樣式 */
         #playerNameInput {
             font-size: 24px; padding: 10px; width: 80%; text-align: center;
             border-radius: 8px; border: 2px solid #FFD700; margin-bottom: 20px;
@@ -59,8 +68,10 @@
     🏆 關卡: <span id="lv">1</span> / 6 <br>
     💰 分數: <span id="score">0</span>
     <div id="combo-box">🔥 Combo x<span id="comboCount">0</span></div>
-    <div id="high-score-box">
-        👑 全球紀錄: <span id="recordHolder">載入中...</span> <span id="recordScore">---</span>
+    
+    <div id="leaderboard-box">
+        <span class="rank-row rank-gold">🥇 <span id="r1Name">載入中...</span> : <span id="r1Score">---</span></span>
+        <span class="rank-row rank-silver">🥈 <span id="r2Name">---</span> : <span id="r2Score">---</span></span>
     </div>
 </div>
 
@@ -70,8 +81,8 @@
 </div>
 
 <div id="record-modal">
-    <h2>🎉 刷新全球紀錄！</h2>
-    <p>太強了！您是目前世界第一！</p>
+    <h2 id="modalTitle">🎉 榮登排行榜！</h2>
+    <p id="modalDesc">您擠進了全球前兩名！</p>
     <p>請留下大名：</p>
     <input type="text" id="playerNameInput" maxlength="8" placeholder="點擊輸入名字" onclick="this.focus()">
     <br>
@@ -82,7 +93,7 @@
 
 <script>
 // =========================================================================
-// 【雲端設定區】已填入您提供的資料
+// Firebase Config (您提供的)
 // =========================================================================
 const firebaseConfig = {
   apiKey: "AIzaSyBQr_3o913vgaWUg4PAuequLEVE1mZFS7M",
@@ -94,17 +105,17 @@ const firebaseConfig = {
   appId: "1:957972615393:web:14fd2ebb956a6c48ade7a0",
   measurementId: "G-M11PJ7Z2T7"
 };
-// =========================================================================
 
-// --- 初始化 Firebase 連線 ---
+// --- 初始化 Firebase ---
 let dbRef; 
 try {
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
-    dbRef = database.ref('global_record'); // 資料庫路徑
-    console.log("已連接至雲端資料庫");
+    // 改用 'global_leaderboard_v2' 避免跟舊的單人紀錄衝突
+    dbRef = database.ref('global_leaderboard_v2'); 
+    console.log("已連接至雲端資料庫 (雙人版)");
 } catch (e) {
-    console.error("Firebase 連線失敗，請檢查設定:", e);
+    console.error("Firebase 連線失敗:", e);
 }
 
 const canvas = document.getElementById('gameCanvas');
@@ -113,11 +124,17 @@ const lvDisp = document.getElementById('lv'), scoreDisp = document.getElementByI
 const msgContainer = document.getElementById('msg-container'), msgDisp = document.getElementById('msg');
 const actionBtn = document.getElementById('actionBtn');
 const recordModal = document.getElementById('record-modal');
-const recordHolderDisp = document.getElementById('recordHolder');
-const recordScoreDisp = document.getElementById('recordScore');
+const modalTitle = document.getElementById('modalTitle');
+const modalDesc = document.getElementById('modalDesc');
 const nameInput = document.getElementById('playerNameInput');
 const comboBox = document.getElementById('combo-box');
 const comboCountDisp = document.getElementById('comboCount');
+
+// 排行榜顯示元素
+const r1NameDisp = document.getElementById('r1Name');
+const r1ScoreDisp = document.getElementById('r1Score');
+const r2NameDisp = document.getElementById('r2Name');
+const r2ScoreDisp = document.getElementById('r2Score');
 
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 window.addEventListener('resize', resize); resize();
@@ -144,33 +161,42 @@ let missCount = 0;
 let precisionScore = 0;
 let combo = 0; 
 
-// 全球紀錄變數
-let globalHighScore = 1000;
-let globalHolderName = 'Benson';
+// --- 排行榜資料 (Array) ---
+// 預設兩名虛擬玩家
+let leaderboard = [
+    { name: 'Benson', score: 1000 },
+    { name: 'Amy', score: 500 }
+];
 
 // --- 監聽雲端資料 ---
 if (dbRef) {
     dbRef.on('value', (snapshot) => {
         const data = snapshot.val();
-        if (data) {
-            globalHighScore = data.score;
-            globalHolderName = data.name;
+        if (data && Array.isArray(data)) {
+            leaderboard = data;
         } else {
-            // 資料庫是空的，寫入預設值
-            dbRef.set({ name: 'Benson', score: 1000 });
+            // 如果雲端是空的，初始化它
+            dbRef.set(leaderboard);
         }
-        updateRecordUI();
+        updateLeaderboardUI();
     });
 } else {
-    // 斷網備案
-    globalHighScore = parseInt(localStorage.getItem('cow_highScore') || 1000);
-    globalHolderName = localStorage.getItem('cow_holderName') || 'Benson';
-    updateRecordUI();
+    // 斷網備案：從 LocalStorage 讀取陣列
+    const localData = localStorage.getItem('cow_leaderboard');
+    if (localData) leaderboard = JSON.parse(localData);
+    updateLeaderboardUI();
 }
 
-function updateRecordUI() {
-    recordHolderDisp.innerText = globalHolderName;
-    recordScoreDisp.innerText = globalHighScore;
+function updateLeaderboardUI() {
+    // 確保有資料
+    if (!leaderboard[0]) leaderboard[0] = { name: '---', score: 0 };
+    if (!leaderboard[1]) leaderboard[1] = { name: '---', score: 0 };
+
+    r1NameDisp.innerText = leaderboard[0].name;
+    r1ScoreDisp.innerText = leaderboard[0].score;
+    
+    r2NameDisp.innerText = leaderboard[1].name;
+    r2ScoreDisp.innerText = leaderboard[1].score;
 }
 
 function updateComboUI() {
@@ -190,8 +216,7 @@ class Cow {
         this.baseWidth = (130 + (lv * 18)) * 0.75;
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
-        // 高度設定為 0.65 (馬路)
-        this.baseY = canvas.height * 0.48;  
+        this.baseY = canvas.height * 0.47;  
         this.y = this.baseY;
         this.x = -200; 
         this.speed = (3 + lv * 1.5); 
@@ -269,7 +294,7 @@ function gameLoop() {
             lasso.y -= lasso.speed; 
             
             const startY = canvas.height;
-            const endY = canvas.height * 0.48;  
+            const endY = canvas.height * 0.47;  
             const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
             const lassoSize = 90 * (0.35 + 0.65 * distRatio);
 
@@ -414,11 +439,22 @@ function successCatch() {
         showMsg(`捕獲成功！<br><span style="font-size:18px">${bonusText}</span>`, ""); 
         setTimeout(() => initLevel(level+1), 2000); 
     } else { 
-        // 判斷是否大於等於全球紀錄
-        if (score >= globalHighScore) {
+        // 【核心邏輯修正】檢查是否進入前兩名
+        // 第2名的分數是 leaderboard[1].score
+        if (score >= leaderboard[1].score) {
             gameState = 'VICTORY';
             msgContainer.style.display = 'none';
             recordModal.style.display = 'block';
+            
+            // 設定對話框標題
+            if (score >= leaderboard[0].score) {
+                modalTitle.innerText = "🎉 刷新冠軍紀錄！";
+                modalDesc.innerText = "太神了！您是新的世界第一！";
+            } else {
+                modalTitle.innerText = "🎉 榮登亞軍！";
+                modalDesc.innerText = "恭喜！您擠進了世界第二名！";
+            }
+            
             nameInput.focus();
         } else {
             gameState = 'VICTORY'; 
@@ -427,22 +463,31 @@ function successCatch() {
     }
 }
 
-// 提交新紀錄 (同時寫入雲端)
+// 提交新紀錄 (處理雙人排名)
 function submitRecord() {
     let name = nameInput.value.trim();
     if (!name) name = "神秘牧場主";
     
-    globalHighScore = score;
-    globalHolderName = name;
+    // 1. 把新紀錄加入陣列
+    leaderboard.push({ name: name, score: score });
     
-    // 如果有雲端連線，寫入雲端
+    // 2. 由大到小排序
+    leaderboard.sort((a, b) => b.score - a.score);
+    
+    // 3. 只保留前 2 名
+    leaderboard = leaderboard.slice(0, 2);
+    
+    // 4. 上傳雲端
     if (dbRef) {
-        dbRef.set({ name: name, score: score });
+        dbRef.set(leaderboard);
     }
     
-    updateRecordUI();
+    // 5. 備份本地
+    localStorage.setItem('cow_leaderboard', JSON.stringify(leaderboard));
+    
+    updateLeaderboardUI();
     recordModal.style.display = 'none';
-    showMsg(`🎉 新紀錄保持人：${name}！<br>分數：${score}`, "再玩一次");
+    showMsg(`🎉 榜單更新完成！<br>分數：${score}`, "再玩一次");
 }
 
 function failCatch() { 
