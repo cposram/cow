@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社區抓牛大賽 - 雙排勝利遊行版</title>
+    <title>社區抓牛大賽 - 完美收繩處決版</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         canvas { display: block; }
@@ -70,8 +70,8 @@ imgAssets.cowGalaxy.src = rawBase + 'cow_galaxy.png';
 imgAssets.cowLegendary.src = rawBase + 'cow_legendary.png';
 imgAssets.hero.src = rawBase + 'cowboy_hero.png';
 
+// 遊戲狀態新增 'REELING' (收繩中)
 let level = 1, score = 0, gameState = 'RUNNING', pullProgress = 0, frameCount = 0;
-// 繩索速度
 let lasso = { y: 0, active: false, speed: 22 };
 
 class Cow {
@@ -80,25 +80,18 @@ class Cow {
         const imgs = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
         this.img = imgs[lv-1] || imgs[0];
         
-        // 【修改點1：牛隻尺寸加大】
-        // 將係數從 0.42 提升到 0.75，讓牛在畫面上更清晰，但仍保留在馬路上的感覺
+        // 初始大小 (遠處)
         this.baseWidth = (130 + (lv * 18)) * 0.75;
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
         
-        // Y位置固定在馬路層
-        // 因為牛變大了，稍微往上提一點點，避免腳踩出馬路
-        this.baseY = canvas.height * 0.35; 
+        // 【修改點1：位置修正】
+        // 之前是 0.35，現在改為 0.40，讓牛更貼近柏油路面
+        this.baseY = canvas.height * 0.40; 
         this.y = this.baseY;
         
         this.x = -200; 
-
-        // 【修改點2：線性難度提升】
-        // Level 1 速度約 4.5 (慢)
-        // Level 6 速度約 12 (快，需要預判)
         this.speed = (3 + lv * 1.5); 
-        
-        // 掙扎力度也隨等級提升
         this.strugglePower = 0.3 + (lv * 0.12); 
     }
     update() {
@@ -106,8 +99,27 @@ class Cow {
             this.x += this.speed;
         }
         else if (gameState === 'CATCHING') {
-            this.x += (Math.random()-0.5) * 5; // 掙扎震動幅度也加大
+            // 掙扎震動
+            this.x += (Math.random()-0.5) * 5; 
             this.y = this.baseY + (Math.random()-0.5) * 3;
+        }
+        else if (gameState === 'REELING') {
+            // 【修改點2：收繩階段邏輯】
+            
+            // 1. 水平修正：將牛拉向畫面正中央
+            // 使用 lerp (線性插值) 讓它平滑地被拖到中間
+            const centerX = canvas.width / 2 - this.width / 2;
+            this.x += (centerX - this.x) * 0.1;
+
+            // 2. 垂直拉近：牛往畫面下方移動 (靠近玩家)
+            this.y += 6; // 拉近速度
+
+            // 3. 透視變大：越近越大
+            this.width *= 1.015;
+            this.height = this.width * 0.75;
+
+            // 4. 掙扎稍微減弱 (已經被拖著走了)
+            this.x += (Math.random()-0.5) * 2; 
         }
     }
     draw() { if (this.img.complete) ctx.drawImage(this.img, this.x, this.y, this.width, this.height); }
@@ -123,7 +135,7 @@ function initLevel(nextLevel) {
 
 function resetLasso() { 
     lasso.active = false; 
-    lasso.y = canvas.height; // 繩索從最底部發射
+    lasso.y = canvas.height; 
 }
 
 function drawBG() {
@@ -143,25 +155,28 @@ function drawBG() {
 function gameLoop() {
     frameCount++;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
     if (gameState === 'VICTORY') {
         drawVictoryScene();
     } else {
         drawBG();
         
-        // 遊戲中隱藏人物，第一人稱視角
+        // 遊戲中隱藏人物，保持第一人稱
         
         currentCow.update(); currentCow.draw();
         
-        // 牛跑出畫面後重生
-        if (currentCow.x > canvas.width + 200) currentCow = new Cow(level);
+        // 跑出畫面重生邏輯 (只在 RUNNING 時有效)
+        if (gameState === 'RUNNING' && currentCow.x > canvas.width + 200) {
+            currentCow = new Cow(level);
+        }
         
-        // 繩索邏輯
+        // 繩索發射邏輯
         if (lasso.active && gameState === 'RUNNING') {
             lasso.y -= lasso.speed; 
             
             // 透視縮放
             const startY = canvas.height;
-            const endY = canvas.height * 0.35;
+            const endY = canvas.height * 0.40; // 配合新的牛位置
             const totalDist = startY - endY;
             const currentDist = lasso.y - endY;
             const distRatio = Math.max(0, currentDist / totalDist); 
@@ -171,23 +186,22 @@ function gameLoop() {
 
             if (imgAssets.lasso.complete) ctx.drawImage(imgAssets.lasso, canvas.width/2 - lassoSize/2, lasso.y - lassoSize/2, lassoSize, lassoSize);
             
-            // 判定範圍
             let cowCY = currentCow.y + currentCow.height/2;
             let cowCX = currentCow.x + currentCow.width/2;
 
-            if (Math.abs(lasso.y - cowCY) < 50 && Math.abs(canvas.width/2 - cowCX) < 60) { // 範圍稍微放寬配合變大的牛
+            if (Math.abs(lasso.y - cowCY) < 50 && Math.abs(canvas.width/2 - cowCX) < 60) {
                 gameState = 'CATCHING'; pullProgress = 50;
             }
             
             if (lasso.y < cowCY - 80) resetLasso();
         }
         
+        // 抓捕中 (角力階段)
         if (gameState === 'CATCHING') {
             pullProgress -= currentCow.strugglePower;
             
             const handX = canvas.width/2; 
             const handY = canvas.height;
-            
             const cowNeckX = currentCow.x + currentCow.width * 0.3;
             const cowNeckY = currentCow.y + currentCow.height * 0.4;
 
@@ -200,18 +214,45 @@ function gameLoop() {
             ctx.stroke();
             
             drawBar();
+            
             if (pullProgress <= 0) failCatch();
-            else if (pullProgress >= 100) successCatch();
+            // 【修改點3：血條滿了不直接贏，而是進入拖曳階段】
+            else if (pullProgress >= 100) {
+                gameState = 'REELING';
+            }
+        }
+        
+        // 【修改點4：收繩拖曳階段 (Reeling)】
+        if (gameState === 'REELING') {
+            const handX = canvas.width/2; 
+            const handY = canvas.height;
+            // 連接到牛脖子
+            const cowNeckX = currentCow.x + currentCow.width * 0.3;
+            const cowNeckY = currentCow.y + currentCow.height * 0.4;
+
+            ctx.beginPath(); 
+            ctx.moveTo(handX, handY);
+            ctx.lineTo(cowNeckX, cowNeckY);
+            
+            // 繩子這時候拉得很緊，很粗
+            ctx.strokeStyle = '#5D4037'; 
+            ctx.lineWidth = 5; 
+            ctx.stroke();
+
+            // 判斷是否拉到眼前了
+            // 當牛的 Y 軸超過畫面的一定比例 (例如 85%)，就算抓到了
+            if (currentCow.y > canvas.height * 0.8) {
+                successCatch();
+            }
         }
     }
     requestAnimationFrame(gameLoop);
 }
 
-// 【修改點3：雙排勝利畫面】
+// 勝利畫面 (雙排)
 function drawVictoryScene() {
     drawBG();
     
-    // 煙火特效
     for(let i=0; i<25; i++) {
         ctx.fillStyle = ['#FFD700', '#FFF', '#FFA500'][i%3];
         ctx.beginPath();
@@ -224,58 +265,40 @@ function drawVictoryScene() {
     const padding = 10;
     const heroW = 90, heroH = 120;
     const heroX = padding;
-    // 主角位置
     const heroY = canvas.height * 0.85 - heroH; 
 
-    // 準備牛隻圖片 (LV1~LV6)
     const allCows = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
-    
-    // 分成兩排：後排(低等)、前排(高等)
-    // 陣列索引 0-2 為後排，3-5 為前排
     const backRowCows = allCows.slice(0, 3);
     const frontRowCows = allCows.slice(3, 6);
 
-    // --- 繪製後排 (離主角遠一點，Y軸較小) ---
-    // 起點設在主角右邊一點
     const startX = heroX + heroW * 0.5;
     const availableW = canvas.width - startX - padding;
-    const stepX = availableW / 3; // 每一排3隻
+    const stepX = availableW / 3; 
 
     backRowCows.forEach((img, i) => {
         if (!img.complete) return;
-        // 後排尺寸稍微小一點 (透視)
         const scale = Math.min(1.0, canvas.width / 500) * 0.9;
         const w = (80 + i*5) * scale;
         const h = w * 0.75;
-        
-        // 錯開位置，放在縫隙間
         const x = startX + (i * stepX) + (stepX/2); 
-        const y = canvas.height * 0.78 - h + Math.sin(frameCount*0.05 + i)*5; // 高度較高(遠)
-
+        const y = canvas.height * 0.78 - h + Math.sin(frameCount*0.05 + i)*5; 
         ctx.drawImage(img, x, y, w, h);
     });
 
-    // --- 繪製主角 (在後排跟前排中間) ---
     if (imgAssets.hero.complete) ctx.drawImage(imgAssets.hero, heroX, heroY, heroW, heroH);
 
-    // --- 繪製前排 (離主角近，Y軸較大，最尊貴) ---
     frontRowCows.forEach((img, i) => {
         if (!img.complete) return;
-        // 前排尺寸大
         const scale = Math.min(1.2, canvas.width / 450) * 1.1;
-        // LV4, LV5, LV6
         const w = (100 + i*15) * scale;
         const h = w * 0.75;
-        
         const x = startX + (i * stepX) + 20; 
-        const y = canvas.height * 0.92 - h + Math.sin(frameCount*0.05 + i + 3)*8; // 高度較低(近)
+        const y = canvas.height * 0.92 - h + Math.sin(frameCount*0.05 + i + 3)*8; 
 
-        // 畫牽繩 (連到主角手)
         ctx.beginPath();
-        ctx.moveTo(heroX + heroW*0.8, heroY + heroH*0.6); // 主角手
-        ctx.quadraticCurveTo(x, y + h/2, x + 10, y + h*0.4); // 牛脖子
+        ctx.moveTo(heroX + heroW*0.8, heroY + heroH*0.6); 
+        ctx.quadraticCurveTo(x, y + h/2, x + 10, y + h*0.4); 
         ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 2; ctx.stroke();
-
         ctx.drawImage(img, x, y, w, h);
     });
 }
