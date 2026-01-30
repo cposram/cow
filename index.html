@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>岡聯牧場抓牛大賽 - 雙雄爭霸版</title>
+    <title>岡聯牧場抓牛大賽 - 全球前三爭霸戰</title>
     <style>
         /* 基礎設定 */
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
@@ -11,19 +11,19 @@
         
         #ranch-story { position: absolute; top: 15px; left: 15px; width: 60%; color: white; font-size: 13px; line-height: 1.5; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); pointer-events: none; z-index: 5; }
         
-        /* UI 調整：讓排行榜靠右對齊，並支援多行 */
         #ui { position: absolute; top: 15px; right: 15px; color: white; text-shadow: 2px 2px 4px #000; font-size: 20px; z-index: 10; text-align: right; }
         
-        /* 排行榜樣式優化 */
+        /* 排行榜樣式 */
         #leaderboard-box { 
-            font-size: 14px; margin-top: 8px; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 8px;
-            text-shadow: 1px 1px 1px rgba(0,0,0,1);
+            font-size: 14px; margin-top: 8px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px;
+            text-shadow: 1px 1px 1px rgba(0,0,0,1); text-align: left;
         }
-        .rank-row { margin-bottom: 2px; display: block; }
-        .rank-gold { color: #FFD700; font-weight: bold; }   /* 金色 */
-        .rank-silver { color: #C0C0C0; font-weight: bold; } /* 銀色 */
+        .rank-row { margin-bottom: 3px; display: block; }
+        .rank-gold { color: #FFD700; font-weight: bold; }
+        .rank-silver { color: #C0C0C0; font-weight: bold; }
+        .rank-bronze { color: #CD7F32; font-weight: bold; }
 
-        #combo-box { font-size: 24px; color: #FF4444; font-weight: bold; display: none; text-shadow: 2px 2px 0 #FFF; margin-top: 5px; animation: pulse 0.5s infinite alternate; }
+        #combo-box { font-size: 24px; color: #FF4444; font-weight: bold; display: none; text-shadow: 2px 2px 0 #FFF; margin-top: 5px; animation: pulse 0.5s infinite alternate; text-align: right; }
         @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
         
         #msg-container { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); text-align: center; display: none; width: 90%; z-index: 20; }
@@ -72,6 +72,7 @@
     <div id="leaderboard-box">
         <span class="rank-row rank-gold">🥇 <span id="r1Name">載入中...</span> : <span id="r1Score">---</span></span>
         <span class="rank-row rank-silver">🥈 <span id="r2Name">---</span> : <span id="r2Score">---</span></span>
+        <span class="rank-row rank-bronze">🥉 <span id="r3Name">---</span> : <span id="r3Score">---</span></span>
     </div>
 </div>
 
@@ -82,7 +83,7 @@
 
 <div id="record-modal">
     <h2 id="modalTitle">🎉 榮登排行榜！</h2>
-    <p id="modalDesc">您擠進了全球前兩名！</p>
+    <p id="modalDesc">您擠進了全球前三名！</p>
     <p>請留下大名：</p>
     <input type="text" id="playerNameInput" maxlength="8" placeholder="點擊輸入名字" onclick="this.focus()">
     <br>
@@ -93,8 +94,26 @@
 
 <script>
 // =========================================================================
-// Firebase Config (您提供的)
+// 🔧 遊戲參數調校區 (GAME CONFIG) - 修改這裡即可調整手感
 // =========================================================================
+const GAME_CONFIG = {
+    cow: {
+        y_pos_ratio: 0.48,    // 牛的垂直位置 (0~1)，0.65 代表在畫面 65% 高度 (柏油路)
+        width_base: 135,      // 牛的基礎寬度 (LV1 的大小)
+        width_growth: 18,     // 每升一級，牛變寬多少
+        scale: 0.75,          // 整體縮放比例
+        speed_base: 3,        // 基礎跑速 (數字越大跑越快)
+        speed_growth: 1.7,    // 每級增加的速度
+        struggle_base: 0.3,   // 基礎抵抗力 (數字越大越難拉)
+        struggle_growth: 0.15 // 每級增加的抵抗力
+    },
+    rope: {
+        target_y_ratio: 0.48  // 繩索瞄準的高度 (建議跟牛的位置 y_pos_ratio 一樣)
+    }
+};
+// =========================================================================
+
+// Firebase Config
 const firebaseConfig = {
   apiKey: "AIzaSyBQr_3o913vgaWUg4PAuequLEVE1mZFS7M",
   authDomain: "cowgame-48dd8.firebaseapp.com",
@@ -111,9 +130,8 @@ let dbRef;
 try {
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
-    // 改用 'global_leaderboard_v2' 避免跟舊的單人紀錄衝突
-    dbRef = database.ref('global_leaderboard_v2'); 
-    console.log("已連接至雲端資料庫 (雙人版)");
+    dbRef = database.ref('global_leaderboard_v3'); 
+    console.log("已連接至雲端資料庫 (三雄版)");
 } catch (e) {
     console.error("Firebase 連線失敗:", e);
 }
@@ -130,11 +148,9 @@ const nameInput = document.getElementById('playerNameInput');
 const comboBox = document.getElementById('combo-box');
 const comboCountDisp = document.getElementById('comboCount');
 
-// 排行榜顯示元素
-const r1NameDisp = document.getElementById('r1Name');
-const r1ScoreDisp = document.getElementById('r1Score');
-const r2NameDisp = document.getElementById('r2Name');
-const r2ScoreDisp = document.getElementById('r2Score');
+const r1NameDisp = document.getElementById('r1Name'), r1ScoreDisp = document.getElementById('r1Score');
+const r2NameDisp = document.getElementById('r2Name'), r2ScoreDisp = document.getElementById('r2Score');
+const r3NameDisp = document.getElementById('r3Name'), r3ScoreDisp = document.getElementById('r3Score');
 
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 window.addEventListener('resize', resize); resize();
@@ -161,42 +177,36 @@ let missCount = 0;
 let precisionScore = 0;
 let combo = 0; 
 
-// --- 排行榜資料 (Array) ---
-// 預設兩名虛擬玩家
 let leaderboard = [
     { name: 'Benson', score: 1000 },
-    { name: 'Amy', score: 500 }
+    { name: 'Amy', score: 500 },
+    { name: 'Tom', score: 300 }
 ];
 
-// --- 監聽雲端資料 ---
 if (dbRef) {
     dbRef.on('value', (snapshot) => {
         const data = snapshot.val();
         if (data && Array.isArray(data)) {
             leaderboard = data;
         } else {
-            // 如果雲端是空的，初始化它
             dbRef.set(leaderboard);
         }
         updateLeaderboardUI();
     });
 } else {
-    // 斷網備案：從 LocalStorage 讀取陣列
-    const localData = localStorage.getItem('cow_leaderboard');
+    const localData = localStorage.getItem('cow_leaderboard_v3');
     if (localData) leaderboard = JSON.parse(localData);
     updateLeaderboardUI();
 }
 
 function updateLeaderboardUI() {
-    // 確保有資料
     if (!leaderboard[0]) leaderboard[0] = { name: '---', score: 0 };
     if (!leaderboard[1]) leaderboard[1] = { name: '---', score: 0 };
+    if (!leaderboard[2]) leaderboard[2] = { name: '---', score: 0 };
 
-    r1NameDisp.innerText = leaderboard[0].name;
-    r1ScoreDisp.innerText = leaderboard[0].score;
-    
-    r2NameDisp.innerText = leaderboard[1].name;
-    r2ScoreDisp.innerText = leaderboard[1].score;
+    r1NameDisp.innerText = leaderboard[0].name; r1ScoreDisp.innerText = leaderboard[0].score;
+    r2NameDisp.innerText = leaderboard[1].name; r2ScoreDisp.innerText = leaderboard[1].score;
+    r3NameDisp.innerText = leaderboard[2].name; r3ScoreDisp.innerText = leaderboard[2].score;
 }
 
 function updateComboUI() {
@@ -213,14 +223,17 @@ class Cow {
         this.lv = lv;
         const imgs = [imgAssets.cowNormal, imgAssets.cowNormal, imgAssets.cowGold, imgAssets.cowDiamond, imgAssets.cowGalaxy, imgAssets.cowLegendary];
         this.img = imgs[lv-1] || imgs[0];
-        this.baseWidth = (130 + (lv * 18)) * 0.75;
+        
+        // 【使用設定檔參數】
+        this.baseWidth = (GAME_CONFIG.cow.width_base + (lv * GAME_CONFIG.cow.width_growth)) * GAME_CONFIG.cow.scale;
         this.width = this.baseWidth; 
         this.height = this.width * 0.75;
-        this.baseY = canvas.height * 0.47;  
+        this.baseY = canvas.height * GAME_CONFIG.cow.y_pos_ratio;  
         this.y = this.baseY;
+        
         this.x = -200; 
-        this.speed = (3 + lv * 1.5); 
-        this.strugglePower = 0.3 + (lv * 0.12); 
+        this.speed = (GAME_CONFIG.cow.speed_base + lv * GAME_CONFIG.cow.speed_growth); 
+        this.strugglePower = GAME_CONFIG.cow.struggle_base + (lv * GAME_CONFIG.cow.struggle_growth); 
         this.reelingSpeed = 0;
     }
     update() {
@@ -294,7 +307,9 @@ function gameLoop() {
             lasso.y -= lasso.speed; 
             
             const startY = canvas.height;
-            const endY = canvas.height * 0.47;  
+            // 【使用設定檔參數】
+            const endY = canvas.height * GAME_CONFIG.rope.target_y_ratio;  
+            
             const distRatio = Math.max(0, (lasso.y - endY) / (startY - endY)); 
             const lassoSize = 90 * (0.35 + 0.65 * distRatio);
 
@@ -439,20 +454,20 @@ function successCatch() {
         showMsg(`捕獲成功！<br><span style="font-size:18px">${bonusText}</span>`, ""); 
         setTimeout(() => initLevel(level+1), 2000); 
     } else { 
-        // 【核心邏輯修正】檢查是否進入前兩名
-        // 第2名的分數是 leaderboard[1].score
-        if (score >= leaderboard[1].score) {
+        if (score >= leaderboard[2].score) {
             gameState = 'VICTORY';
             msgContainer.style.display = 'none';
             recordModal.style.display = 'block';
             
-            // 設定對話框標題
             if (score >= leaderboard[0].score) {
                 modalTitle.innerText = "🎉 刷新冠軍紀錄！";
                 modalDesc.innerText = "太神了！您是新的世界第一！";
-            } else {
+            } else if (score >= leaderboard[1].score) {
                 modalTitle.innerText = "🎉 榮登亞軍！";
                 modalDesc.innerText = "恭喜！您擠進了世界第二名！";
+            } else {
+                modalTitle.innerText = "🎉 獲得季軍！";
+                modalDesc.innerText = "不錯喔！您是世界第三強！";
             }
             
             nameInput.focus();
@@ -463,27 +478,19 @@ function successCatch() {
     }
 }
 
-// 提交新紀錄 (處理雙人排名)
 function submitRecord() {
     let name = nameInput.value.trim();
     if (!name) name = "神秘牧場主";
     
-    // 1. 把新紀錄加入陣列
     leaderboard.push({ name: name, score: score });
-    
-    // 2. 由大到小排序
     leaderboard.sort((a, b) => b.score - a.score);
+    leaderboard = leaderboard.slice(0, 3);
     
-    // 3. 只保留前 2 名
-    leaderboard = leaderboard.slice(0, 2);
-    
-    // 4. 上傳雲端
     if (dbRef) {
         dbRef.set(leaderboard);
     }
     
-    // 5. 備份本地
-    localStorage.setItem('cow_leaderboard', JSON.stringify(leaderboard));
+    localStorage.setItem('cow_leaderboard_v3', JSON.stringify(leaderboard));
     
     updateLeaderboardUI();
     recordModal.style.display = 'none';
