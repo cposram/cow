@@ -125,7 +125,7 @@ let dbRef;
 try {
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
-    dbRef = database.ref('global_leaderboard_v3'); 
+    dbRef = database.ref('global_leaderboard_v4'); 
     console.log("已連接至雲端資料庫");
 } catch (e) {
     console.error("Firebase 連線失敗:", e);
