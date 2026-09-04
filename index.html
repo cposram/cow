@@ -118,7 +118,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 // 指定抓牛大賽專屬路徑
-const LEADERBOARD_PATH = 'global_leaderboard_v4';
+const LEADERBOARD_PATH = 'global_leaderboard';
 
 // 變數宣告
 const canvas = document.getElementById('gameCanvas');
@@ -467,7 +467,7 @@ function submitRecord() {
     
     recordModal.style.display = 'none';
     
-    // 直接 push 至抓牛專屬的 global_leaderboard_v4 節點
+    // 直接 push 至抓牛專屬的 global_leaderboard 節點
     db.ref(LEADERBOARD_PATH).push({
         name: name,
         score: score,
