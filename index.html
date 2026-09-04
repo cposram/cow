@@ -107,29 +107,18 @@ const GAME_CONFIG = {
 };
 
 // =========================================================================
-// Firebase Config
+// Firebase Config (與五子棋相同設定)
 // =========================================================================
 const firebaseConfig = {
-  apiKey: "AIzaSyBQr_3o913vgaWUg4PAuequLEVE1mZFS7M",
-  authDomain: "cowgame-48dd8.firebaseapp.com",
-  databaseURL: "https://cowgame-48dd8-default-rtdb.firebaseio.com",
-  projectId: "cowgame-48dd8",
-  storageBucket: "cowgame-48dd8.firebasestorage.app",
-  messagingSenderId: "957972615393",
-  appId: "1:957972615393:web:14fd2ebb956a6c48ade7a0",
-  measurementId: "G-M11PJ7Z2T7"
+    apiKey: "AIzaSyBQr_3o913vgaWUg4PAuequLEVE1mZFS7M",
+    databaseURL: "https://cowgame-48dd8-default-rtdb.firebaseio.com",
+    projectId: "cowgame-48dd8"
 };
 
-// --- 初始化 Firebase ---
-let dbRef; 
-try {
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
-    dbRef = database.ref('global_leaderboard_v4'); 
-    console.log("已連接至雲端資料庫");
-} catch (e) {
-    console.error("Firebase 連線失敗:", e);
-}
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+// 指定抓牛大賽專屬路徑
+const LEADERBOARD_PATH = 'global_leaderboard_v4';
 
 // 變數宣告
 const canvas = document.getElementById('gameCanvas');
@@ -172,37 +161,23 @@ let missCount = 0;
 let precisionScore = 0;
 let combo = 0; 
 
-// 預設空陣列，等待雲端資料
+// 排行榜本地暫存
 let leaderboard = [];
 
 // =========================================================================
-// 【核心修改】只讀取，不寫入預設值
+// 🏆 監聽 Firebase 排行榜 (依照分數 score 由高到低排序，取前 3 名)
 // =========================================================================
-if (dbRef) {
-    dbRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        
-        if (data) {
-            // 如果資料是物件(例如只剩1筆)，轉成陣列
-            if (Array.isArray(data)) {
-                leaderboard = data;
-            } else {
-                leaderboard = Object.values(data);
-            }
-            // 排序 (確保高分在選，避免資料庫亂掉)
-            leaderboard.sort((a, b) => b.score - a.score);
-        } else {
-            // 如果資料庫是空的 (null)，就清空本地顯示
-            leaderboard = []; 
-        }
-        updateLeaderboardUI();
-    });
-} else {
-    // 斷網備案
-    const localData = localStorage.getItem('cow_leaderboard_v3');
-    if (localData) leaderboard = JSON.parse(localData);
+db.ref(LEADERBOARD_PATH).orderByChild('score').limitToLast(3).on('value', (snap) => {
+    leaderboard = [];
+    if (snap.exists()) {
+        snap.forEach((child) => {
+            leaderboard.push(child.val());
+        });
+        // Firebase limitToLast 會由小到大排序，這裡倒轉成高分在前
+        leaderboard.reverse();
+    }
     updateLeaderboardUI();
-}
+});
 
 function updateLeaderboardUI() {
     const p1 = leaderboard[0] || { name: '---', score: '---' };
@@ -460,15 +435,15 @@ function successCatch() {
         showMsg(`捕獲成功！<br><span style="font-size:18px">${bonusText}</span>`, ""); 
         setTimeout(() => initLevel(level+1), 2000); 
     } else { 
-        // 判斷是否大於第三名 (如果第三名不存在，也算勝利)
-        const targetScore = leaderboard[2] ? leaderboard[2].score : 0;
+        // 判斷是否大於第三名或榜單未滿 3 人
+        const thirdPlaceScore = leaderboard[2] ? leaderboard[2].score : 0;
+        const isTopThree = leaderboard.length < 3 || score >= thirdPlaceScore;
         
-        if (score >= targetScore) {
+        if (isTopThree) {
             gameState = 'VICTORY';
             msgContainer.style.display = 'none';
             recordModal.style.display = 'block';
             
-            // 判斷名次顯示訊息
             let rankMsg = "榮登季軍！";
             if (!leaderboard[0] || score >= leaderboard[0].score) rankMsg = "刷新冠軍紀錄！";
             else if (!leaderboard[1] || score >= leaderboard[1].score) rankMsg = "榮登亞軍！";
@@ -484,65 +459,27 @@ function successCatch() {
 }
 
 // =========================================================================
-// 【核心修改】 改用 transaction (交易協商) 來送出資料
-// 確保您的後台修改不會被玩家的舊資料覆蓋
+// 📤 送出成績到 Firebase (與五子棋相同的 push 方式)
 // =========================================================================
 function submitRecord() {
     let name = nameInput.value.trim();
     if (!name) name = "神秘牧場主";
     
-    // 關閉視窗
     recordModal.style.display = 'none';
     
-    if (dbRef) {
-        // 使用 transaction 來安全寫入
-        dbRef.transaction((currentData) => {
-            // 1. 取得雲端最新資料 (如果沒有就是空陣列)
-            let remoteList = currentData || [];
-            
-            // 2. 確保是陣列
-            if (typeof remoteList === 'object' && !Array.isArray(remoteList)) {
-                remoteList = Object.values(remoteList);
-            }
-
-            // 3. 加入這位玩家的新分數
-            remoteList.push({ name: name, score: score });
-            
-            // 4. 重新排序 (由大到小)
-            remoteList.sort((a, b) => b.score - a.score);
-            
-            // 5. 只留前三名
-            if (remoteList.length > 3) {
-                remoteList = remoteList.slice(0, 3);
-            }
-            
-            // 6. 回傳處理好的資料給 Firebase
-            return remoteList;
-
-        }, (error, committed, snapshot) => {
-            if (error) {
-                console.error('交易失敗', error);
-                showMsg("連線有點怪，分數可能沒存進去...", "確定");
-            } else if (committed) {
-                // 成功寫入後，更新畫面
-                // 其實 dbRef.on('value') 會自動更新，但這裡可以做個雙重確認
-                const finalData = snapshot.val();
-                if (finalData) {
-                     leaderboard = finalData;
-                     updateLeaderboardUI();
-                }
-                showMsg(`🎉 榜單更新完成！<br>分數：${score}`, "再玩一次");
-            }
-        });
-    } else {
-        // 斷網備案 (舊邏輯，僅修改本地)
-        leaderboard.push({ name: name, score: score });
-        leaderboard.sort((a, b) => b.score - a.score);
-        leaderboard = leaderboard.slice(0, 3);
-        localStorage.setItem('cow_leaderboard_v3', JSON.stringify(leaderboard));
-        updateLeaderboardUI();
-        showMsg(`🎉 榜單更新完成！<br>分數：${score}`, "再玩一次");
-    }
+    // 直接 push 至抓牛專屬的 global_leaderboard_v4 節點
+    db.ref(LEADERBOARD_PATH).push({
+        name: name,
+        score: score,
+        time: Date.now()
+    }, (error) => {
+        if (error) {
+            console.error('寫入失敗:', error);
+            showMsg("分數上傳失敗，請檢查網路連線", "確定");
+        } else {
+            showMsg(`🎉 榜單更新完成！<br>分數：${score}`, "再玩一次");
+        }
+    });
 }
 
 function failCatch() { 
